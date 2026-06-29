@@ -1,0 +1,43 @@
+{
+  "name": "kioskshell",
+  "version": "1.0.0",
+  "description": "KioskShell — Electron kiosk browser",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron . --no-sandbox --disable-gpu",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder"
+  },
+  "build": {
+    "appId": "com.kioskshell.app",
+    "productName": "KioskShell",
+    "mac": {
+      "target": "dmg"
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "runAfterFinish": false,
+      "include": "build/installer.nsh"
+    },
+    "linux": {
+      "target": "AppImage"
+    },
+    "files": [
+      "*.html",
+      "*.js",
+      "*.json",
+      "*.svg"
+    ]
+  },
+  "devDependencies": {
+    "electron": "^29.4.6",
+    "electron-builder": "^24.0.0"
+  }
+}

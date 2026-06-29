@@ -1,0 +1,13 @@
+{
+  "name": "KioskShell",
+  "short_name": "KioskShell",
+  "description": "Secure kiosk browser with domain lock, virtual keyboard, and fullscreen enforcement",
+  "start_url": "./index.html",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#0a0c0f",
+  "theme_color": "#f0a500",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
