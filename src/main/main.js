@@ -9,6 +9,7 @@ const path = require('path');
 // contentWindow. This does NOT affect the GPU compositor and does NOT break
 // fullscreen.
 app.commandLine.appendSwitch('disable-web-security');
+app.commandLine.appendSwitch('disable-site-isolation-trials');
 // Disable Chromium's native touch virtual keyboard so it doesn't conflict with our custom one
 app.commandLine.appendSwitch('disable-touch-virtual-keyboard');
 // Use software rendering to avoid GPU helper crashes in restricted environments.
@@ -24,15 +25,24 @@ let forceFullscreen = false;
 let lastVirtualKeyFrameId = null;
 let allowAppExit = false;
 const EDITABLE_CHECK = `(() => {
-  const el = document.activeElement;
-  if (!el) return false;
-  if (el.matches?.('textarea')) return !el.readOnly && !el.disabled;
-  if (el.matches?.('input')) {
-    const type = (el.type || 'text').toLowerCase();
-    if (['button','checkbox','color','file','hidden','image','radio','range','reset','submit'].includes(type)) return false;
-    return !el.readOnly && !el.disabled;
+  if (!window.__ksTrackInit) {
+    window.__ksTrackInit = true;
+    window.__ksLastClick = 0;
+    window.addEventListener('pointerdown', () => { window.__ksLastClick = Date.now(); }, true);
   }
-  return !!el.isContentEditable;
+  const el = document.activeElement;
+  if (!el) return { editable: false };
+  let editable = false;
+  if (el.matches?.('textarea')) editable = !el.readOnly && !el.disabled;
+  else if (el.matches?.('input')) {
+    const type = (el.type || 'text').toLowerCase();
+    if (!['button','checkbox','color','file','hidden','image','radio','range','reset','submit'].includes(type)) {
+      editable = !el.readOnly && !el.disabled;
+    }
+  } else {
+    editable = !!el.isContentEditable;
+  }
+  return { editable, recentClick: (Date.now() - window.__ksLastClick) < 2000 };
 })()`;
 
 async function findActiveEditableFrame(webContents) {
@@ -43,10 +53,10 @@ async function findActiveEditableFrame(webContents) {
   }
   for (const frame of frames) {
     try {
-      const isEditable = await frame.executeJavaScript(EDITABLE_CHECK, true);
-      if (isEditable) {
+      const res = await frame.executeJavaScript(EDITABLE_CHECK, true);
+      if (res && res.editable) {
         lastVirtualKeyFrameId = frame.frameTreeNodeId;
-        return frame;
+        return { frame, recentClick: res.recentClick };
       }
     } catch (_) {}
   }
@@ -199,8 +209,9 @@ ipcMain.on('virtual-key', async (_ev, payload = {}) => {
   if (!win) return;
   const wc = win.webContents;
   if (!wc || !wc.mainFrame) return;
-  const activeFrame = await findActiveEditableFrame(wc);
-  if (!activeFrame) return;
+  const res = await findActiveEditableFrame(wc);
+  if (!res) return;
+  const activeFrame = res.frame;
 
   const text = typeof payload.text === 'string' ? payload.text : '';
   const textLiteral = JSON.stringify(text);
@@ -285,9 +296,9 @@ ipcMain.on('virtual-key', async (_ev, payload = {}) => {
 });
 
 ipcMain.handle('virtual-key-state', async () => {
-  if (!win) return { hasEditable: false };
-  const activeFrame = await findActiveEditableFrame(win.webContents);
-  return { hasEditable: !!activeFrame };
+  if (!win) return { hasEditable: false, recentClick: false };
+  const res = await findActiveEditableFrame(win.webContents);
+  return { hasEditable: !!res, recentClick: res ? res.recentClick : false };
 });
 
 /** Hard refresh — reload the shell, bypassing the HTTP cache. */
@@ -368,11 +379,18 @@ app.whenReady().then(() => {
     const h = details.responseHeaders || {};
     for (const key of Object.keys(h)) {
       const lower = key.toLowerCase();
-      if (lower === 'x-frame-options' || lower === 'content-security-policy' || lower === 'content-security-policy-report-only') {
+      if ([
+        'x-frame-options',
+        'content-security-policy',
+        'content-security-policy-report-only',
+        'cross-origin-opener-policy',
+        'cross-origin-embedder-policy',
+        'cross-origin-resource-policy'
+      ].includes(lower)) {
         delete h[key];
       }
     }
-    callback({ responseHeaders: h });
+    callback({ cancel: false, responseHeaders: h });
   });
   createWindow();
 });

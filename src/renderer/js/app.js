@@ -33,7 +33,7 @@ let vkManualHideTimer=null;
 let vkLastPointerIntentAt=0;
 let vkProbeTimer=null;
 let vkForcedOpen=false;
-const VK_DEBUG=false;
+
 
 /* ═══════════════════════════════════════════════════
    PERSISTENCE
@@ -377,7 +377,7 @@ function resetVirtualKeyboardManualHide(){
   clearTimeout(vkManualHideTimer);
   vkManualHideTimer=null;
   vkManualHidden=false;
-  updateVirtualKeyboardDebug();
+  
 }
 
 function clearVirtualKeyboardFocusState(){
@@ -422,12 +422,13 @@ function scheduleIframeKeyboardProbe(attempt=0){
     .then(state=>{
       const target=getIframeVirtualKeyboardTarget();
       const hasEditable=!!target||!!state?.hasEditable;
+      const recentClick=!!state?.recentClick||hasRecentVirtualKeyboardPointerIntent();
       if(hasEditable){
         if(target)vkTarget=target;
         vkFrameFocused=true;
         vkKeepVisibleUntil=Date.now()+1200;
         clearTimeout(vkHideTimer);
-        showVirtualKeyboard('iframe-probe');
+        if(recentClick||isVirtualKeyboardVisible())showVirtualKeyboard('iframe-probe');
         return;
       }
       if(attempt>=6||!hasRecentVirtualKeyboardPointerIntent()){
@@ -461,39 +462,14 @@ function sendVirtualKeyboardInput(payload){
   return false;
 }
 
-function updateVirtualKeyboardDebug(){
-  if(!VK_DEBUG)return;
-  const el=document.getElementById('vk-debug');
-  if(!el)return;
-  const target=getVirtualKeyboardTarget();
-  const targetLabel=target
-    ?`${target.tagName.toLowerCase()}${target.type?':'+target.type.toLowerCase():''}`
-    :'none';
-  const activeLabel=document.activeElement
-    ?document.activeElement.tagName.toLowerCase()
-    :'none';
-  const visible=document.getElementById('vk-overlay')?.classList.contains('visible')?'yes':'no';
-  const frameActive=isIframeElementActive();
-  vkFrameFocused=frameActive||vkFrameFocused;
-  el.textContent=[
-    `vk:${visible}`,
-    `enabled:${cfg.vkEnabled?'yes':'no'}`,
-    `auto:${cfg.vkAutoShow?'yes':'no'}`,
-    `frame:${frameActive||vkFrameFocused?'yes':'no'}`,
-    `manual:${vkManualHidden?'yes':'no'}`,
-    `target:${targetLabel}`,
-    `active:${activeLabel}`,
-    `keep:${Math.max(0,Math.ceil((vkKeepVisibleUntil-Date.now())/1000))}s`,
-    `last:${vkLastReason}`
-  ].join('\n');
-}
+
 
 function showVirtualKeyboard(reason='show'){
   vkLastReason=reason;
-  if(!cfg.vkEnabled){updateVirtualKeyboardDebug();return;}
+  if(!cfg.vkEnabled){return;}
   cancelVirtualKeyboardProbe();
   const vk=document.getElementById('vk-overlay');
-  if(!vk){updateVirtualKeyboardDebug();return;}
+  if(!vk){return;}
   renderVirtualKeyboard();
   applyVirtualKeyboardStyle();
   vk.style.display='flex';
@@ -502,7 +478,7 @@ function showVirtualKeyboard(reason='show'){
     vk.classList.add('visible');
     if(cfg.vkMode!=='floating')vk.style.transform='translate(-50%,0)';
     updateVirtualKeyboardTriggerButton();
-    updateVirtualKeyboardDebug();
+    
   });
 }
 
@@ -516,7 +492,7 @@ function hideVirtualKeyboard(immediate=false,reason='hide'){
     cancelVirtualKeyboardProbe();
     vkManualHideTimer=setTimeout(()=>{
       vkManualHidden=false;
-      updateVirtualKeyboardDebug();
+      
     },1200);
   }
   const vk=document.getElementById('vk-overlay');
@@ -528,7 +504,7 @@ function hideVirtualKeyboard(immediate=false,reason='hide'){
   vk.classList.remove('visible');
   vk.setAttribute('aria-hidden','true');
   if(cfg.vkMode!=='floating')vk.style.transform='translate(-50%,105%)';
-  const done=()=>{if(!vk.classList.contains('visible'))vk.style.display='none';updateVirtualKeyboardTriggerButton();updateVirtualKeyboardDebug();};
+  const done=()=>{if(!vk.classList.contains('visible'))vk.style.display='none';updateVirtualKeyboardTriggerButton();};
   if(immediate)done(); else setTimeout(done,220);
 }
 
@@ -628,7 +604,7 @@ function handleVirtualKey(key){
       if(sent){
         vkKeepVisibleUntil=Date.now()+1500;
         vkLastReason='electron-key';
-        updateVirtualKeyboardDebug();
+        
       }else{
         hideVirtualKeyboard(false,'missing-target');
       }
@@ -985,7 +961,8 @@ setInterval(()=>{
     if(state?.hasEditable){
       vkFrameFocused=true;
       vkKeepVisibleUntil=Date.now()+1200;
-      if(!isVirtualKeyboardVisible())showVirtualKeyboard('iframe-poll');
+      const recentClick=!!state?.recentClick||hasRecentVirtualKeyboardPointerIntent();
+      if(!isVirtualKeyboardVisible() && recentClick)showVirtualKeyboard('iframe-poll');
     }else if(vkFrameFocused&&!vkForcedOpen){
       vkFrameFocused=false;
       queueVirtualKeyboardHide();
