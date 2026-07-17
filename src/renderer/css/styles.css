@@ -21,14 +21,9 @@
     #status-container{display:flex;align-items:center;justify-content:center;margin-left:16px;padding-left:16px;border-left:1px solid var(--border);height:26px}
     #status-dot{position:relative;width:14px;height:14px;flex-shrink:0;border-radius:50%;background:radial-gradient(circle at 30% 30%, #94a3b8 0%, #475569 100%);transition:all .3s ease;z-index:2;box-shadow:inset 0 -2px 4px rgba(0,0,0,0.4), inset 0 2px 4px rgba(255,255,255,0.6), 0 1px 2px rgba(0,0,0,0.2);border:1px solid rgba(0,0,0,0.15)}
     #status-dot::before{content:'';position:absolute;top:15%;left:20%;width:60%;height:35%;background:linear-gradient(180deg, rgba(255,255,255,0.9) 0%, rgba(255,255,255,0) 100%);border-radius:50%;z-index:3;pointer-events:none}
-    #status-dot::after{content:'';position:absolute;inset:-6px;border-radius:50%;border:2px solid transparent;opacity:0;z-index:1;pointer-events:none}
     #status-dot.live{background:radial-gradient(circle at 30% 30%, #34d399 0%, #059669 100%);box-shadow:inset 0 -2px 4px rgba(0,0,0,0.4), inset 0 2px 4px rgba(255,255,255,0.6), 0 0 12px rgba(16,185,129,0.9), 0 0 4px rgba(16,185,129,0.6);border-color:#047857}
-    #status-dot.live::after{border-color:#10b981;animation:radar-pulse 2s cubic-bezier(0.2, 0.8, 0.2, 1) infinite}
     #status-dot.blocked{background:radial-gradient(circle at 30% 30%, #f87171 0%, #dc2626 100%);box-shadow:inset 0 -2px 4px rgba(0,0,0,0.4), inset 0 2px 4px rgba(255,255,255,0.6), 0 0 12px rgba(239,68,68,0.9), 0 0 4px rgba(239,68,68,0.6);border-color:#b91c1c}
-    #status-dot.blocked::after{border-color:#ef4444;animation:radar-pulse 2s cubic-bezier(0.2, 0.8, 0.2, 1) infinite}
     #status-dot.loading{background:radial-gradient(circle at 30% 30%, #fbbf24 0%, #d97706 100%);box-shadow:inset 0 -2px 4px rgba(0,0,0,0.4), inset 0 2px 4px rgba(255,255,255,0.6), 0 0 12px rgba(245,158,11,0.9), 0 0 4px rgba(245,158,11,0.6);border-color:#b45309}
-    #status-dot.loading::after{border-color:#f59e0b;animation:radar-pulse 1s cubic-bezier(0.2, 0.8, 0.2, 1) infinite}
-    @keyframes radar-pulse{0%{transform:scale(0.6);opacity:0.8}100%{transform:scale(2.5);opacity:0}}
     .topbar-sep{width:1px;height:24px;background:var(--border);flex-shrink:0}
     #url-bar{flex:1;min-width:120px;height:40px;padding:0 12px;background:var(--surface);border:1px solid var(--border);color:var(--text);font-family:var(--font-mono);font-size:14px;border-radius:8px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;display:flex;align-items:center;gap:8px;box-shadow:0 1px 2px rgba(0,0,0,.02) inset}
     #url-bar-protocol{color:var(--muted);flex-shrink:0}
