@@ -9,7 +9,7 @@
   <title>KioskShell</title>
   <link rel="manifest" href="manifest.json"/>
   <link rel="icon" href="icon.svg" type="image/svg+xml"/>
-  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet"/>
   <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
@@ -104,21 +104,32 @@
 
 <div id="settings-overlay">
   <div id="settings-panel">
-    <div class="sp-header">
-      <div class="sp-title">KIOSK CONFIGURATION</div>
-      <button class="sp-close" onclick="closeSettings()">&#x2715;</button>
-    </div>
-    <div class="sp-tabs">
-      <button class="sp-tab active" onclick="switchTab(0)">DISPLAY</button>
-      <button class="sp-tab" onclick="switchTab(1)">BUTTONS</button>
-      <button class="sp-tab" onclick="switchTab(2)">SECURITY</button>
-      <button class="sp-tab" onclick="switchTab(3)">DOMAINS</button>
-      <button class="sp-tab" onclick="switchTab(4)">ADMIN</button>
-      <button class="sp-tab" onclick="switchTab(5)">LOG</button>
+    
+    <!-- Sidebar -->
+    <div class="sp-sidebar">
+      <div class="sp-sidebar-header">
+        <div class="sp-title">KIOSK CONFIGURATION</div>
+      </div>
+      <div class="sp-tabs">
+        <button class="sp-tab active" onclick="switchTab(0)">General</button>
+        <button class="sp-tab" onclick="switchTab(1)">Navigation</button>
+        <button class="sp-tab" onclick="switchTab(2)">Security</button>
+        <button class="sp-tab" onclick="switchTab(3)">Domains</button>
+        <button class="sp-tab" onclick="switchTab(4)">System</button>
+        <button class="sp-tab" onclick="switchTab(5)">Logs</button>
+      </div>
     </div>
 
-    <!-- Tab 0: Display -->
-    <div class="sp-pane active" id="tab-0">
+    <!-- Main Content Area -->
+    <div class="sp-main">
+      <div class="sp-header">
+        <div class="sp-header-spacer"></div>
+        <button class="sp-close" onclick="closeSettings()">&#x2715;</button>
+      </div>
+
+      <div class="sp-content">
+        <!-- Tab 0: Display -->
+        <div class="sp-pane active" id="tab-0">
       <div class="sp-section">
         <div class="sp-label">Target URL</div>
         <div class="sp-row">
@@ -296,10 +307,12 @@
         <div id="activity-log"><div class="log-entry"><span class="log-info">No activity yet.</span></div></div>
       </div>
     </div>
-
-    <div class="sp-section">
-      <button class="sp-save" onclick="saveSettings()">SAVE &amp; APPLY</button>
-    </div>
+    
+      </div> <!-- End .sp-content -->
+      <div class="sp-footer">
+        <button class="sp-save" onclick="saveSettings()">SAVE &amp; APPLY</button>
+      </div>
+    </div> <!-- End .sp-main -->
   </div>
 </div>
 
