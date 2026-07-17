@@ -2,7 +2,7 @@
   "name": "kioskshell",
   "version": "1.0.0",
   "description": "KioskShell — Electron kiosk browser",
-  "main": "main.js",
+  "main": "src/main/main.js",
   "scripts": {
     "start": "electron . --no-sandbox --disable-gpu",
     "pack": "electron-builder --dir",

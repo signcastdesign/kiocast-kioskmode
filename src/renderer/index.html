@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-fullscreen"/>
+  <meta name="mobile-web-app-capable" content="yes"/>
+  <title>KioskShell</title>
+  <link rel="manifest" href="manifest.json"/>
+  <link rel="icon" href="icon.svg" type="image/svg+xml"/>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<div id="app">
+  <div id="topbar">
+    <div id="logo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+      KIOSK<span class="sub">SHELL</span>
+    </div>
+    <button id="nav-back" onclick="historyBack()" title="Back" disabled>
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+    </button>
+    <button id="nav-fwd" onclick="historyFwd()" title="Forward" disabled>
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+    </button>
+    <button id="nav-reload" onclick="reloadFrame()" title="Reload">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+    </button>
+    <div class="topbar-sep"></div>
+    <div id="url-bar">
+      <span id="url-bar-protocol">https://</span>
+      <span id="url-bar-domain">No URL set</span>
+      <span id="url-bar-path"></span>
+    </div>
+    <div id="status-dot"></div>
+    <div class="topbar-sep"></div>
+    <!-- Quick-nav buttons rendered here -->
+    <div id="quicknav-area"></div>
+    <div class="topbar-sep" id="qnav-sep" style="display:none"></div>
+    <button class="btn-icon" id="vk-trigger" type="button" title="Keyboard" aria-label="Keyboard">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="2.5" y="5.5" width="19" height="13" rx="2"></rect>
+        <path d="M6 10h.01M9 10h.01M12 10h.01M15 10h.01M18 10h.01M7 14h.01M10 14h.01M13 14h.01M16 14h2"></path>
+      </svg>
+    </button>
+  </div>
+
+  <div id="main">
+    <div id="frame-wrap">
+      <div id="load-bar"></div>
+      <!-- Transparent overlay: intercepts ALL clicks when domains list is active -->
+      <div id="click-guard" onclick="guardClick(event)"></div>
+      <iframe id="site-frame"
+        allow="autoplay;fullscreen"></iframe>
+      <div id="block-screen">
+        <svg class="bs-icon" width="50" height="50" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
+        <h2>ACCESS BLOCKED</h2>
+        <div class="bs-domain" id="bs-domain-msg"></div>
+        <button class="bs-back" onclick="dismissBlock()">&#8617; Return to Kiosk</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="admin-trigger"></div>
+
+<div id="toast"></div>
+
+<div id="idle-screen">
+  <div class="idle-logo">KIOSKSHELL</div>
+  <div id="idle-clock">00:00:00</div>
+  <div id="idle-date"></div>
+  <div id="idle-tap">TAP TO WAKE</div>
+</div>
+
+<div id="pin-overlay">
+  <div id="pin-title">ADMIN ACCESS</div>
+  <div id="pin-dots">
+    <div class="pin-dot" id="pd0"></div><div class="pin-dot" id="pd1"></div>
+    <div class="pin-dot" id="pd2"></div><div class="pin-dot" id="pd3"></div>
+  </div>
+  <div id="pin-pad">
+    <button class="pin-btn" onclick="pinKey('1')">1</button><button class="pin-btn" onclick="pinKey('2')">2</button><button class="pin-btn" onclick="pinKey('3')">3</button>
+    <button class="pin-btn" onclick="pinKey('4')">4</button><button class="pin-btn" onclick="pinKey('5')">5</button><button class="pin-btn" onclick="pinKey('6')">6</button>
+    <button class="pin-btn" onclick="pinKey('7')">7</button><button class="pin-btn" onclick="pinKey('8')">8</button><button class="pin-btn" onclick="pinKey('9')">9</button>
+    <button class="pin-btn clear" onclick="pinKey('clear')">CLR</button><button class="pin-btn" onclick="pinKey('0')">0</button><button class="pin-btn clear" onclick="pinKey('back')">&#9003;</button>
+  </div>
+  <div id="pin-hint">Enter 4-digit PIN</div>
+  <button id="pin-cancel-btn" onclick="pinCancel()">CANCEL</button>
+</div>
+
+<div id="vk-overlay" aria-hidden="true">
+  <div id="vk-toolbar">
+    <div id="vk-drag" aria-hidden="true"></div>
+    <div id="vk-layout-badge"></div>
+    <button id="vk-close" type="button" onclick="hideVirtualKeyboard(false,'manual-hide')">HIDE</button>
+  </div>
+  <div id="vk-rows"></div>
+</div>
+<div id="vk-debug"></div>
+
+<div id="settings-overlay">
+  <div id="settings-panel">
+    <div class="sp-header">
+      <div class="sp-title">KIOSK CONFIGURATION</div>
+      <button class="sp-close" onclick="closeSettings()">&#x2715;</button>
+    </div>
+    <div class="sp-tabs">
+      <button class="sp-tab active" onclick="switchTab(0)">DISPLAY</button>
+      <button class="sp-tab" onclick="switchTab(1)">BUTTONS</button>
+      <button class="sp-tab" onclick="switchTab(2)">SECURITY</button>
+      <button class="sp-tab" onclick="switchTab(3)">DOMAINS</button>
+      <button class="sp-tab" onclick="switchTab(4)">ADMIN</button>
+      <button class="sp-tab" onclick="switchTab(5)">LOG</button>
+    </div>
+
+    <!-- Tab 0: Display -->
+    <div class="sp-pane active" id="tab-0">
+      <div class="sp-section">
+        <div class="sp-label">Target URL</div>
+        <div class="sp-row">
+          <input class="sp-input" id="cfg-url" type="url" placeholder="https://example.com"/>
+          <button class="sp-btn" onclick="applyUrl()">LOAD</button>
+        </div>
+      </div>
+      <div class="sp-section">
+        <div class="sp-label">Idle Screensaver</div>
+        <div class="sp-help">Show clock screensaver after inactivity. Set 0 to disable.</div>
+        <div class="sp-row">
+          <input class="sp-input" id="cfg-idle" type="number" placeholder="0" min="0" max="3600" style="max-width:140px">
+          <span style="font-family:var(--font-mono);font-size:12px;color:var(--muted)">seconds (0 = off)</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab 1: Quick-nav Buttons -->
+    <div class="sp-pane" id="tab-1">
+      <div class="sp-section">
+        <div class="sp-label">Quick Navigation Buttons</div>
+        <div class="sp-help">Buttons appear in the topbar. Drag to reorder. Each button navigates to a URL when clicked.</div>
+        <div class="sp-row">
+          <input class="sp-input" id="qn-emoji" type="text" placeholder="&#128196; emoji / icon" style="max-width:90px">
+          <input class="sp-input" id="qn-label" type="text" placeholder="Label">
+          <input class="sp-input" id="qn-url" type="url" placeholder="https://...">
+          <button class="sp-btn" onclick="addQNav()">ADD</button>
+        </div>
+        <div id="qnav-list"></div>
+      </div>
+    </div>
+
+    <!-- Tab 2: Security -->
+    <div class="sp-pane" id="tab-2">
+      <div class="sp-section">
+        <div class="sp-label">Browser Controls</div>
+        <div class="toggle-row">
+          <div><div class="toggle-label">Disable Right-Click</div><div class="toggle-desc">Block context menu on shell page</div></div>
+          <label class="toggle"><input type="checkbox" id="tog-rightclick"><span class="toggle-slider"></span></label>
+        </div>
+        <div class="toggle-row">
+          <div><div class="toggle-label">Disable Pinch &amp; Zoom</div><div class="toggle-desc">Block touch zoom, Ctrl+scroll, Ctrl+&#177;</div></div>
+          <label class="toggle"><input type="checkbox" id="tog-zoom"><span class="toggle-slider"></span></label>
+        </div>
+        <div class="toggle-row">
+          <div><div class="toggle-label">Disable Text Selection</div><div class="toggle-desc">Prevent selecting text in the shell UI</div></div>
+          <label class="toggle"><input type="checkbox" id="tog-select"><span class="toggle-slider"></span></label>
+        </div>
+        <div class="toggle-row">
+          <div><div class="toggle-label">Block Keyboard Shortcuts</div><div class="toggle-desc">Block F-keys, Ctrl+R/T/W, Alt+F4 etc.</div></div>
+          <label class="toggle"><input type="checkbox" id="tog-shortcuts"><span class="toggle-slider"></span></label>
+        </div>
+        <div class="toggle-row">
+          <div><div class="toggle-label">Block New Windows / Popups</div><div class="toggle-desc">Prevent target=_blank opening new tabs</div></div>
+          <label class="toggle"><input type="checkbox" id="tog-popups"><span class="toggle-slider"></span></label>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab 3: Domains -->
+    <div class="sp-pane" id="tab-3">
+      <div class="sp-section">
+        <div class="sp-label">Domain Allow List</div>
+        <div class="sp-help">Subdomains automatically included. Leave empty to allow all. When active, a transparent guard overlay intercepts all iframe clicks and checks the destination domain before navigating.</div>
+        <div class="sp-row">
+          <input class="sp-input" id="domain-input" type="text" placeholder="example.com">
+          <button class="sp-btn" onclick="addDomain()">ADD</button>
+        </div>
+        <div id="domain-list"></div>
+      </div>
+      <div class="sp-section">
+        <div class="sp-label">Navigation Guard</div>
+        <div class="toggle-row">
+          <div><div class="toggle-label">Monitor iframe Navigation</div><div class="toggle-desc">Check domain on every page load inside frame</div></div>
+          <label class="toggle"><input type="checkbox" id="tog-strict" checked><span class="toggle-slider"></span></label>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab 4: Admin -->
+    <div class="sp-pane" id="tab-4">
+      <div class="sp-section">
+        <div class="sp-label">Admin PIN Lock</div>
+        <div class="sp-help">Set a 4-digit PIN to protect settings. Leave new PIN blank to remove lock.</div>
+        <div class="sp-row"><input class="sp-input" id="cfg-pin" type="password" placeholder="Current PIN (blank if none)" maxlength="4"></div>
+        <div class="sp-row">
+          <input class="sp-input" id="cfg-pin-new" type="password" placeholder="New PIN (4 digits)" maxlength="4">
+          <input class="sp-input" id="cfg-pin-confirm" type="password" placeholder="Confirm new PIN" maxlength="4">
+        </div>
+        <button class="sp-btn" onclick="savePIN()" style="width:100%">UPDATE PIN</button>
+      </div>
+      <div class="sp-section">
+        <div class="sp-label">Admin Access</div>
+        <div class="toggle-row">
+          <div><div class="toggle-label">Hide Toolbar</div><div class="toggle-desc">Remove the top toolbar during kiosk use</div></div>
+          <label class="toggle"><input type="checkbox" id="tog-hide-toolbar"><span class="toggle-slider"></span></label>
+        </div>
+        <div class="sp-help" style="margin-top:10px">When the toolbar is hidden, open admin by tapping 5 times in a row on the top-left corner (where the logo is).</div>
+      </div>
+      <div class="sp-section">
+        <div class="sp-label">Virtual Keyboard</div>
+        <div class="toggle-row">
+          <div><div class="toggle-label">Enable Virtual Keyboard</div><div class="toggle-desc">Allow the shell keyboard feature</div></div>
+          <label class="toggle"><input type="checkbox" id="tog-vk-enabled"><span class="toggle-slider"></span></label>
+        </div>
+        <div class="toggle-row">
+          <div><div class="toggle-label">Auto-show On Text Fields</div><div class="toggle-desc">Open the keyboard automatically when a shell text field gets focus</div></div>
+          <label class="toggle"><input type="checkbox" id="tog-vk-autoshow"><span class="toggle-slider"></span></label>
+        </div>
+        <div class="sp-row" style="margin-top:12px">
+          <select class="sp-input" id="cfg-vk-mode">
+            <option value="fixed">Fixed Bottom</option>
+            <option value="floating">Floating</option>
+          </select>
+          <select class="sp-input" id="cfg-vk-layout">
+            <option value="en">English</option>
+            <option value="numeric">Numeric</option>
+            <option value="fr">French</option>
+            <option value="de">German</option>
+            <option value="es">Spanish</option>
+          </select>
+        </div>
+        <div class="sp-help">Floating mode is draggable. Fixed mode docks the keyboard to the bottom.</div>
+        <div class="sp-row" style="align-items:center;gap:8px">
+          <span style="font-family:var(--font-mono);font-size:11px;color:var(--muted);min-width:86px">Width</span>
+          <input type="range" id="cfg-vk-width" min="40" max="100" step="5" style="flex:1;accent-color:var(--amber)">
+          <span id="cfg-vk-width-val" style="font-family:var(--font-mono);font-size:12px;color:var(--amber);min-width:42px">100%</span>
+        </div>
+        <div class="sp-row" style="align-items:center;gap:8px">
+          <span style="font-family:var(--font-mono);font-size:11px;color:var(--muted);min-width:86px">Key Height</span>
+          <input type="range" id="cfg-vk-height" min="42" max="84" step="2" style="flex:1;accent-color:var(--amber)">
+          <span id="cfg-vk-height-val" style="font-family:var(--font-mono);font-size:12px;color:var(--amber);min-width:42px">56px</span>
+        </div>
+        <div class="sp-row" style="align-items:center;gap:8px">
+          <span style="font-family:var(--font-mono);font-size:11px;color:var(--muted);min-width:86px">Font Size</span>
+          <input type="range" id="cfg-vk-font" min="14" max="26" step="1" style="flex:1;accent-color:var(--amber)">
+          <span id="cfg-vk-font-val" style="font-family:var(--font-mono);font-size:12px;color:var(--amber);min-width:42px">20px</span>
+        </div>
+      </div>
+      <div class="sp-section">
+        <div class="sp-label">Diagnostics</div>
+        <div class="sp-row" style="gap:8px;flex-wrap:wrap">
+          <button class="sp-btn ghost" onclick="hardRefresh()" style="flex:1">HARD REFRESH</button>
+          <button class="sp-btn ghost" onclick="toggleDevTools()" style="flex:1">DEV TOOLS</button>
+        </div>
+        <div class="sp-help" style="margin-top:10px">DevTools is disabled in packaged builds to prevent kiosk escape.</div>
+      </div>
+      <div class="sp-section">
+        <div class="sp-label">System Lockdown (Windows Only)</div>
+        <div class="sp-help">
+          Disables the native Windows Touch Keyboard, Edge Swipes, and 3/4-finger gestures to ensure the kiosk cannot be bypassed. This will trigger a UAC prompt on Windows and requires a system reboot to fully apply registry changes.
+        </div>
+        <button class="sp-btn" onclick="lockdownWindows()" style="width:100%;background:var(--red-glow);border-color:var(--red);color:var(--red)">APPLY WINDOWS LOCKDOWN</button>
+      </div>
+      <div class="sp-section">
+        <div class="sp-label">Session</div>
+        <div class="sp-row" style="gap:8px;flex-wrap:wrap">
+          <button class="sp-btn ghost" onclick="clearActivity()" style="flex:1">CLEAR LOG</button>
+          <button class="sp-btn ghost" onclick="clearCacheOnly()" style="flex:1">CLEAR CACHE</button>
+        </div>
+        <div class="sp-row" style="gap:8px;flex-wrap:wrap;margin-top:8px">
+          <button class="sp-btn danger" onclick="factoryReset()" style="flex:1">FACTORY RESET</button>
+          <button class="sp-btn danger" onclick="wipeAllData()" style="flex:1">WIPE ALL DATA</button>
+        </div>
+        <div class="sp-row" style="gap:8px;flex-wrap:wrap;margin-top:8px">
+          <button class="sp-btn danger" onclick="exitApplication()" style="flex:1">EXIT APP</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab 5: Log -->
+    <div class="sp-pane" id="tab-5">
+      <div class="sp-section">
+        <div class="sp-label">Activity Log</div>
+        <div id="activity-log"><div class="log-entry"><span class="log-info">No activity yet.</span></div></div>
+      </div>
+    </div>
+
+    <div class="sp-section">
+      <button class="sp-save" onclick="saveSettings()">SAVE &amp; APPLY</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/app.js"></script>
+</body>
+</html>

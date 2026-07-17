@@ -99,7 +99,7 @@ function createWindow() {
   win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   win.setFullScreen(true);
   win.setKiosk(true);
-  win.loadFile('index.html');
+  win.loadFile(path.join(__dirname, '../renderer/index.html'));
   win.on('closed', () => { win = null; });
   win.on('will-resize', (event) => event.preventDefault());
   win.on('will-move', (event) => event.preventDefault());
