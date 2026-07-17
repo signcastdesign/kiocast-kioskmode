@@ -738,6 +738,7 @@ function isDomainAllowed(d){if(!cfg.domains.length)return true;if(getImplicitDom
 
 function applyUrl(){const v=document.getElementById('cfg-url').value.trim();if(!v)return;cfg.url=v;saveCfg();navigateTo(v)}
 function navigateTo(url){
+  vkLastPointerIntentAt = 0;
   url=normalizeUrl(url);
   const domain=extractDomain(url);
   if(!isDomainAllowed(domain)){showBlockScreen(domain);log('block','Blocked: '+url);return}
@@ -748,9 +749,9 @@ function navigateTo(url){
   navHistory=navHistory.slice(0,navIndex+1);navHistory.push(url);navIndex=navHistory.length-1;
   updateNavButtons();log('ok','Loaded: '+url);
 }
-function historyBack(){if(navIndex<=0)return;navIndex--;const u=navHistory[navIndex];startLoadBar();document.getElementById('site-frame').src=u;updateUrlBar(u);updateNavButtons()}
-function historyFwd(){if(navIndex>=navHistory.length-1)return;navIndex++;const u=navHistory[navIndex];startLoadBar();document.getElementById('site-frame').src=u;updateUrlBar(u);updateNavButtons()}
-function reloadFrame(){const f=document.getElementById('site-frame');startLoadBar();try{f.contentWindow.location.reload()}catch(e){f.src=f.src}}
+function historyBack(){vkLastPointerIntentAt=0;if(navIndex<=0)return;navIndex--;const u=navHistory[navIndex];startLoadBar();document.getElementById('site-frame').src=u;updateUrlBar(u);updateNavButtons()}
+function historyFwd(){vkLastPointerIntentAt=0;if(navIndex>=navHistory.length-1)return;navIndex++;const u=navHistory[navIndex];startLoadBar();document.getElementById('site-frame').src=u;updateUrlBar(u);updateNavButtons()}
+function reloadFrame(){vkLastPointerIntentAt=0;const f=document.getElementById('site-frame');startLoadBar();try{f.contentWindow.location.reload()}catch(e){f.src=f.src}}
 function updateNavButtons(){document.getElementById('nav-back').disabled=navIndex<=0;document.getElementById('nav-fwd').disabled=navIndex>=navHistory.length-1}
 
 const frame=document.getElementById('site-frame');

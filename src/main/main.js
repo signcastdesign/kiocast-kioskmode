@@ -375,11 +375,13 @@ ipcMain.handle('exit-app', async () => {
 
 app.whenReady().then(() => {
   // Strip headers that block iframe embedding (X-Frame-Options, CSP frame-ancestors)
-  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
-    const h = details.responseHeaders || {};
-    for (const key of Object.keys(h)) {
+  session.defaultSession.webRequest.onHeadersReceived({ urls: ['*://*/*'] }, (details, callback) => {
+    const originalHeaders = details.responseHeaders || {};
+    const newHeaders = {};
+    
+    for (const key of Object.keys(originalHeaders)) {
       const lower = key.toLowerCase();
-      if ([
+      if (![
         'x-frame-options',
         'content-security-policy',
         'content-security-policy-report-only',
@@ -387,10 +389,10 @@ app.whenReady().then(() => {
         'cross-origin-embedder-policy',
         'cross-origin-resource-policy'
       ].includes(lower)) {
-        delete h[key];
+        newHeaders[key] = originalHeaders[key];
       }
     }
-    callback({ cancel: false, responseHeaders: h });
+    callback({ cancel: false, responseHeaders: newHeaders });
   });
   createWindow();
 });
