@@ -1,6 +1,6 @@
 {
   "name": "kioskshell",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "KioskShell — Electron kiosk browser",
   "main": "src/main/main.js",
   "scripts": {
@@ -30,10 +30,8 @@
       "target": "AppImage"
     },
     "files": [
-      "*.html",
-      "*.js",
-      "*.json",
-      "*.svg"
+      "src/**/*",
+      "package.json"
     ]
   },
   "devDependencies": {
