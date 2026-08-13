@@ -1,6 +1,6 @@
 {
   "name": "kioskshell",
-  "version": "1.1.5",
+  "version": "1.1.6",
   "description": "KIOCAST KioskShell - secure touch kiosk browser",
   "author": "SignCast Design",
   "main": "src/main/main.js",
@@ -39,10 +39,23 @@
     "files": [
       "src/**/*",
       "package.json"
+    ],
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "signcastdesign",
+        "repo": "kiocast-kioskmode"
+      }
     ]
+  },
+  "dependencies": {
+    "electron-updater": "^6.6.2"
   },
   "devDependencies": {
     "electron": "^29.4.6",
     "electron-builder": "^24.0.0"
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.9"
   }
 }

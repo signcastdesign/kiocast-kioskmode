@@ -73,7 +73,7 @@ function openSettings(){
   document.getElementById('cfg-pin').value='';
   document.getElementById('cfg-pin-new').value='';
   document.getElementById('cfg-pin-confirm').value='';
-  renderDomainList();renderQNavList();renderVirtualKeyboardSettings();switchTab(0);
+  renderDomainList();renderQNavList();renderVirtualKeyboardSettings();refreshUpdateState();switchTab(0);
   document.getElementById('settings-overlay').classList.add('open');
 }
 function closeSettings(){document.getElementById('settings-overlay').classList.remove('open');syncVirtualKeyboardToFocus()}
@@ -1017,6 +1017,67 @@ function hardRefresh(){
   if(window.kioskElectron?.hardRefresh)window.kioskElectron.hardRefresh();
   else location.reload();
 }
+
+function renderUpdateState(state={}){
+  const statusEl=document.getElementById('update-status');
+  const progressEl=document.getElementById('update-progress');
+  const checkBtn=document.getElementById('update-check-btn');
+  const downloadBtn=document.getElementById('update-download-btn');
+  const installBtn=document.getElementById('update-install-btn');
+  if(!statusEl||!progressEl||!checkBtn||!downloadBtn||!installBtn)return;
+
+  const version=state.version||'unknown';
+  const target=state.availableVersion?` -> ${state.availableVersion}`:'';
+  const progress=Math.max(0,Math.min(100,parseInt(state.progress)||0));
+  const labels={
+    idle:`Current version: ${version}`,
+    checking:`Checking for updates... Current version: ${version}`,
+    available:`Update available: ${version}${target}`,
+    downloading:`Downloading update: ${progress}%`,
+    ready:`Update ready: ${version}${target}. Restart to install.`,
+    none:`No update available. Current version: ${version}`,
+    installing:'Installing update and restarting...',
+    error:`Update error: ${state.error||'Unknown error'}`
+  };
+
+  statusEl.textContent=labels[state.status]||labels.idle;
+  progressEl.style.width=state.status==='downloading'||state.status==='ready'?`${progress}%`:'0%';
+  checkBtn.disabled=['checking','downloading','installing'].includes(state.status);
+  downloadBtn.style.display=state.status==='available'?'':'none';
+  downloadBtn.disabled=state.status!=='available';
+  installBtn.style.display=state.status==='ready'?'':'none';
+  installBtn.disabled=state.status!=='ready';
+}
+
+async function refreshUpdateState(){
+  if(!window.kioskElectron?.getUpdateState){renderUpdateState({status:'error',error:'Updater unavailable in browser preview'});return}
+  renderUpdateState(await window.kioskElectron.getUpdateState());
+}
+
+async function checkForSoftwareUpdate(){
+  if(!window.kioskElectron?.checkForUpdate){showToast('Updater unavailable','error');return}
+  log('info','Update check requested');
+  renderUpdateState({status:'checking'});
+  try{renderUpdateState(await window.kioskElectron.checkForUpdate())}
+  catch(e){renderUpdateState({status:'error',error:e.message||String(e)})}
+}
+
+async function downloadSoftwareUpdate(){
+  if(!window.kioskElectron?.downloadUpdate){showToast('Updater unavailable','error');return}
+  log('info','Update download requested');
+  renderUpdateState({status:'downloading',progress:0});
+  try{renderUpdateState(await window.kioskElectron.downloadUpdate())}
+  catch(e){renderUpdateState({status:'error',error:e.message||String(e)})}
+}
+
+async function installSoftwareUpdate(){
+  if(!confirm('Restart KIOCAST KioskShell and install the downloaded update now?'))return;
+  if(!window.kioskElectron?.installUpdate){showToast('Updater unavailable','error');return}
+  log('info','Update install requested');
+  renderUpdateState({status:'installing'});
+  await window.kioskElectron.installUpdate();
+}
+
 function toggleDevTools(){
   log('info','DevTools toggled');
   window.kioskElectron?.toggleDevTools?.();
@@ -1068,4 +1129,6 @@ if(!window.kioskElectron&&'serviceWorker'in navigator)navigator.serviceWorker.re
    INIT
 ═══════════════════════════════════════════════════ */
 loadCfg();applySettings();updateNavButtons();
+if(window.kioskElectron?.onUpdateState)window.kioskElectron.onUpdateState(renderUpdateState);
+refreshUpdateState();
 if(cfg.url)navigateTo(cfg.url);else openSettings();

@@ -5,6 +5,7 @@ const { app, BrowserWindow, ipcMain, screen, Menu, session } = require('electron
 const fs = require('fs');
 const path = require('path');
 const { execFile } = require('child_process');
+const { autoUpdater } = require('electron-updater');
 
 // Disable web security globally so the renderer can access cross-origin iframe
 // contentWindow. This does NOT affect the GPU compositor and does NOT break
@@ -28,6 +29,13 @@ let allowAppExit = false;
 let virtualKeyStateCache = { time: 0, value: { hasEditable: false, recentClick: false } };
 let kioskGuardTimer = null;
 let shellGuardBusy = false;
+let updateState = {
+  status: 'idle',
+  version: app.getVersion(),
+  availableVersion: null,
+  progress: 0,
+  error: null
+};
 const EDITABLE_CHECK = `(() => {
   if (!window.__ksTrackInit) {
     window.__ksTrackInit = true;
@@ -66,6 +74,63 @@ async function findActiveEditableFrame(webContents) {
   }
   lastVirtualKeyFrameId = null;
   return null;
+}
+
+function sendUpdateState() {
+  if (!win || win.isDestroyed()) return;
+  win.webContents.send('update-state', updateState);
+}
+
+function setUpdateState(patch) {
+  updateState = { ...updateState, ...patch, version: app.getVersion() };
+  sendUpdateState();
+  return updateState;
+}
+
+function configureAutoUpdater() {
+  autoUpdater.autoDownload = false;
+  autoUpdater.autoInstallOnAppQuit = false;
+
+  autoUpdater.on('checking-for-update', () => {
+    setUpdateState({ status: 'checking', progress: 0, error: null });
+  });
+
+  autoUpdater.on('update-available', info => {
+    setUpdateState({
+      status: 'available',
+      availableVersion: info.version || null,
+      progress: 0,
+      error: null
+    });
+  });
+
+  autoUpdater.on('update-not-available', () => {
+    setUpdateState({ status: 'none', progress: 0, error: null });
+  });
+
+  autoUpdater.on('download-progress', progress => {
+    setUpdateState({
+      status: 'downloading',
+      progress: Math.max(0, Math.min(100, Math.round(progress.percent || 0))),
+      error: null
+    });
+  });
+
+  autoUpdater.on('update-downloaded', info => {
+    setUpdateState({
+      status: 'ready',
+      availableVersion: info.version || updateState.availableVersion,
+      progress: 100,
+      error: null
+    });
+  });
+
+  autoUpdater.on('error', error => {
+    setUpdateState({
+      status: 'error',
+      error: error && error.message ? error.message : String(error)
+    });
+  });
 }
 
 // ── Window ────────────────────────────────────────────────────────────────────
@@ -435,6 +500,40 @@ ipcMain.handle('wipe-data', async () => {
   return true;
 });
 
+ipcMain.handle('update-state', async () => updateState);
+
+ipcMain.handle('update-check', async () => {
+  if (!app.isPackaged) {
+    return setUpdateState({
+      status: 'error',
+      error: 'Updates are only available in the installed Windows app.'
+    });
+  }
+  setUpdateState({ status: 'checking', progress: 0, error: null });
+  await autoUpdater.checkForUpdates();
+  return updateState;
+});
+
+ipcMain.handle('update-download', async () => {
+  if (!app.isPackaged) {
+    return setUpdateState({
+      status: 'error',
+      error: 'Updates are only available in the installed Windows app.'
+    });
+  }
+  setUpdateState({ status: 'downloading', progress: 0, error: null });
+  await autoUpdater.downloadUpdate();
+  return updateState;
+});
+
+ipcMain.handle('update-install', async () => {
+  if (updateState.status !== 'ready') return updateState;
+  enableAppExit();
+  restoreWindowsShell();
+  setTimeout(() => autoUpdater.quitAndInstall(false, true), 250);
+  return setUpdateState({ status: 'installing', error: null });
+});
+
 /** Lockdown Windows OS (Elevated) */
 ipcMain.handle('lockdown-windows', async () => {
   if (process.platform !== 'win32') return false;
@@ -481,6 +580,7 @@ ipcMain.handle('exit-app', async () => {
 // ── Lifecycle ─────────────────────────────────────────────────────────────────
 
 app.whenReady().then(() => {
+  configureAutoUpdater();
   // Strip headers that block iframe embedding (X-Frame-Options, CSP frame-ancestors)
   session.defaultSession.webRequest.onHeadersReceived({ urls: ['*://*/*'] }, (details, callback) => {
     if (details.resourceType && !['mainFrame', 'subFrame'].includes(details.resourceType)) {

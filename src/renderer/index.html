@@ -101,7 +101,7 @@
   </div>
   <div id="vk-rows"></div>
 </div>
-<div id="vk-debug"></div>
+
 
 <div id="settings-overlay">
   <div id="settings-panel">
@@ -268,6 +268,19 @@
           <span style="font-family:var(--font-mono);font-size:11px;color:var(--muted);min-width:86px">Font Size</span>
           <input type="range" id="cfg-vk-font" min="14" max="26" step="1" style="flex:1;accent-color:var(--amber)">
           <span id="cfg-vk-font-val" style="font-family:var(--font-mono);font-size:12px;color:var(--amber);min-width:42px">20px</span>
+        </div>
+      </div>
+      <div class="sp-section">
+        <div class="sp-label">Software Update</div>
+        <div class="sp-help">Check GitHub Releases for a newer KIOCAST KioskShell build, download it, and install without manually transferring a setup file.</div>
+        <div class="sp-row" style="align-items:center;gap:10px;flex-wrap:wrap">
+          <button class="sp-btn" id="update-check-btn" onclick="checkForSoftwareUpdate()" style="flex:1">CHECK FOR UPDATE</button>
+          <button class="sp-btn ghost" id="update-download-btn" onclick="downloadSoftwareUpdate()" style="flex:1;display:none">DOWNLOAD UPDATE</button>
+          <button class="sp-btn danger" id="update-install-btn" onclick="installSoftwareUpdate()" style="flex:1;display:none">RESTART &amp; INSTALL</button>
+        </div>
+        <div class="sp-help" id="update-status" style="margin-top:10px">Current version: checking...</div>
+        <div style="height:8px;background:var(--surface);border:1px solid var(--border);border-radius:999px;overflow:hidden;margin-top:10px">
+          <div id="update-progress" style="width:0%;height:100%;background:var(--amber);transition:width .2s ease"></div>
         </div>
       </div>
       <div class="sp-section">

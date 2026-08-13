@@ -28,6 +28,13 @@ contextBridge.exposeInMainWorld('kioskElectron', {
   /** Wipe cookies, storage, and cache for the framed site. */
   wipeData:       ()        => ipcRenderer.invoke('wipe-data'),
 
+  /** Application updater controls. */
+  getUpdateState: ()        => ipcRenderer.invoke('update-state'),
+  checkForUpdate: ()        => ipcRenderer.invoke('update-check'),
+  downloadUpdate: ()        => ipcRenderer.invoke('update-download'),
+  installUpdate:  ()        => ipcRenderer.invoke('update-install'),
+  onUpdateState:  (cb)      => ipcRenderer.on('update-state', (_, state) => cb(state)),
+
   /** Lockdown Windows features (disables touch keyboard, edge swipes, and multi-finger gestures) */
   lockdownWindows: ()       => ipcRenderer.invoke('lockdown-windows'),
 
