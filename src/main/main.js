@@ -4,6 +4,7 @@
 const { app, BrowserWindow, ipcMain, screen, Menu, session } = require('electron');
 const fs = require('fs');
 const path = require('path');
+const { execFile } = require('child_process');
 
 // Disable web security globally so the renderer can access cross-origin iframe
 // contentWindow. This does NOT affect the GPU compositor and does NOT break
@@ -25,6 +26,8 @@ let forceFullscreen = false;
 let lastVirtualKeyFrameId = null;
 let allowAppExit = false;
 let virtualKeyStateCache = { time: 0, value: { hasEditable: false, recentClick: false } };
+let kioskGuardTimer = null;
+let shellGuardBusy = false;
 const EDITABLE_CHECK = `(() => {
   if (!window.__ksTrackInit) {
     window.__ksTrackInit = true;
@@ -70,10 +73,96 @@ async function findActiveEditableFrame(webContents) {
 function enableAppExit() {
   allowAppExit = true;
   forceFullscreen = false;
+  stopKioskGuard();
+  restoreWindowsShell();
   if (!win || win.isDestroyed()) return;
   try { win.setClosable(true); } catch (_) {}
   try { win.setAlwaysOnTop(false); } catch (_) {}
   try { if (win.isKiosk()) win.setKiosk(false); } catch (_) {}
+}
+
+function runHiddenPowerShell(script) {
+  if (process.platform !== 'win32') return;
+  execFile('powershell.exe', [
+    '-NoProfile',
+    '-ExecutionPolicy', 'Bypass',
+    '-WindowStyle', 'Hidden',
+    '-Command', script
+  ], { windowsHide: true }, () => {});
+}
+
+function suppressWindowsShell() {
+  if (process.platform !== 'win32' || shellGuardBusy || allowAppExit) return;
+  shellGuardBusy = true;
+  const script = `
+    $ErrorActionPreference = 'SilentlyContinue'
+    Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+public static class Win32 {
+  [DllImport("user32.dll")] public static extern IntPtr FindWindow(string lpClassName, string lpWindowName);
+  [DllImport("user32.dll")] public static extern IntPtr FindWindowEx(IntPtr parent, IntPtr childAfter, string className, string windowName);
+  [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+}
+"@
+    foreach ($class in @('Shell_TrayWnd','Shell_SecondaryTrayWnd')) {
+      $h = [Win32]::FindWindow($class, $null)
+      if ($h -ne [IntPtr]::Zero) { [Win32]::ShowWindow($h, 0) | Out-Null }
+    }
+    Get-Process StartMenuExperienceHost,SearchHost,SearchApp -ErrorAction SilentlyContinue | Stop-Process -Force
+  `;
+  execFile('powershell.exe', [
+    '-NoProfile',
+    '-ExecutionPolicy', 'Bypass',
+    '-WindowStyle', 'Hidden',
+    '-Command', script
+  ], { windowsHide: true }, () => { shellGuardBusy = false; });
+}
+
+function restoreWindowsShell() {
+  if (process.platform !== 'win32') return;
+  runHiddenPowerShell(`
+    $ErrorActionPreference = 'SilentlyContinue'
+    Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+public static class Win32 {
+  [DllImport("user32.dll")] public static extern IntPtr FindWindow(string lpClassName, string lpWindowName);
+  [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+}
+"@
+    foreach ($class in @('Shell_TrayWnd','Shell_SecondaryTrayWnd')) {
+      $h = [Win32]::FindWindow($class, $null)
+      if ($h -ne [IntPtr]::Zero) { [Win32]::ShowWindow($h, 5) | Out-Null }
+    }
+  `);
+}
+
+function enforceKioskWindow() {
+  if (!win || win.isDestroyed() || allowAppExit) return;
+  try { win.setSkipTaskbar(true); } catch (_) {}
+  try { win.setAlwaysOnTop(true, 'screen-saver'); } catch (_) {}
+  try { if (!win.isFullScreen()) win.setFullScreen(true); } catch (_) {}
+  try { if (!win.isKiosk()) win.setKiosk(true); } catch (_) {}
+  try { if (win.isMinimized()) win.restore(); } catch (_) {}
+  try { win.moveTop(); } catch (_) {}
+  try { win.focus(); } catch (_) {}
+}
+
+function startKioskGuard() {
+  if (kioskGuardTimer) clearInterval(kioskGuardTimer);
+  suppressWindowsShell();
+  enforceKioskWindow();
+  kioskGuardTimer = setInterval(() => {
+    enforceKioskWindow();
+    suppressWindowsShell();
+  }, 1500);
+}
+
+function stopKioskGuard() {
+  if (!kioskGuardTimer) return;
+  clearInterval(kioskGuardTimer);
+  kioskGuardTimer = null;
 }
 
 function createWindow() {
@@ -106,10 +195,12 @@ function createWindow() {
   Menu.setApplicationMenu(null);
   forceFullscreen = true;
   win.setMenuBarVisibility(false);
+  win.setSkipTaskbar(true);
   win.setAlwaysOnTop(true, 'screen-saver');
   win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   win.setFullScreen(true);
   win.setKiosk(true);
+  startKioskGuard();
   win.loadFile(path.join(__dirname, '../renderer/index.html'));
   win.on('closed', () => { win = null; });
   win.on('will-resize', (event) => event.preventDefault());
@@ -132,9 +223,7 @@ function createWindow() {
     if (!win || allowAppExit) return;
     setTimeout(() => {
       if (!win || win.isDestroyed() || allowAppExit) return;
-      win.setAlwaysOnTop(true, 'screen-saver');
-      if (win.isMinimized()) win.restore();
-      win.focus();
+      enforceKioskWindow();
     }, 50);
   });
   win.on('close', (event) => {
@@ -160,9 +249,11 @@ function createWindow() {
     const blockedCtrlShift = input.control && input.shift && ['i', 'j', 'c'].includes(lower);
     const blockedAlt = input.alt && ['f4', 'left', 'right', 'home'].includes(lower);
     const blockedNavKey = ['BrowserBack', 'BrowserForward', 'BrowserRefresh'].includes(key);
+    const blockedMeta = input.meta || lower === 'meta' || lower === 'super' || lower === 'os';
     const blockedFullscreenKey = key === 'Escape' || key === 'F11';
-    if (isFunctionKey || blockedCtrl || blockedCtrlShift || blockedAlt || blockedNavKey || blockedFullscreenKey) {
+    if (isFunctionKey || blockedCtrl || blockedCtrlShift || blockedAlt || blockedNavKey || blockedFullscreenKey || blockedMeta) {
       event.preventDefault();
+      enforceKioskWindow();
     }
   });
   win.webContents.on('devtools-opened', () => {
@@ -185,8 +276,8 @@ function createWindow() {
     .forEach(ev => win.on(ev, sendState));
 
   // Re-enter fullscreen when forceFullscreen is on
-  win.on('leave-full-screen',      () => { if (forceFullscreen) setTimeout(() => win && win.setFullScreen(true), 200); });
-  win.on('leave-html-full-screen', () => { if (forceFullscreen) setTimeout(() => win && win.setFullScreen(true), 200); });
+  win.on('leave-full-screen',      () => { if (forceFullscreen) setTimeout(enforceKioskWindow, 100); });
+  win.on('leave-html-full-screen', () => { if (forceFullscreen) setTimeout(enforceKioskWindow, 100); });
 }
 
 // ── IPC ───────────────────────────────────────────────────────────────────────
