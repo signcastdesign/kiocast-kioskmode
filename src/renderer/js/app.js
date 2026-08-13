@@ -6,7 +6,7 @@ let cfg={
   quickNavBtns:[],
   disableRightClick:true, disableZoom:true, disableSelect:false,
   disableShortcuts:true, blockPopups:true,
-  strictMode:true, idleTimeout:0, hideToolbar:false,
+  strictMode:true, idleTimeout:0, hideToolbar:false, showKeyboardButton:true, showNavButtons:true,
   vkEnabled:true, vkAutoShow:true, vkMode:'fixed', vkLayout:'en', vkWidth:100, vkHeight:56, vkFont:20,
   vkFloatX:20, vkFloatY:null,
 };
@@ -69,6 +69,8 @@ function openSettings(){
   document.getElementById('tog-popups').checked=cfg.blockPopups;
   document.getElementById('tog-strict').checked=cfg.strictMode;
   document.getElementById('tog-hide-toolbar').checked=cfg.hideToolbar;
+  document.getElementById('tog-show-keyboard-btn').checked=cfg.showKeyboardButton!==false;
+  document.getElementById('tog-show-nav-buttons').checked=cfg.showNavButtons!==false;
   document.getElementById('tog-vk-enabled').checked=cfg.vkEnabled;
   document.getElementById('tog-vk-autoshow').checked=cfg.vkAutoShow!==false;
   document.getElementById('cfg-vk-mode').value=cfg.vkMode||'fixed';
@@ -89,6 +91,8 @@ function saveSettings(){
   cfg.blockPopups=document.getElementById('tog-popups').checked;
   cfg.strictMode=document.getElementById('tog-strict').checked;
   cfg.hideToolbar=document.getElementById('tog-hide-toolbar').checked;
+  cfg.showKeyboardButton=document.getElementById('tog-show-keyboard-btn').checked;
+  cfg.showNavButtons=document.getElementById('tog-show-nav-buttons').checked;
   cfg.vkEnabled=document.getElementById('tog-vk-enabled').checked;
   cfg.vkAutoShow=document.getElementById('tog-vk-autoshow').checked;
   cfg.vkMode=document.getElementById('cfg-vk-mode').value;
@@ -114,6 +118,8 @@ function applySettings(){
   document.body.style.userSelect=cfg.disableSelect?'none':'';
   document.body.style.webkitUserSelect=cfg.disableSelect?'none':'';
   document.getElementById('app').classList.toggle('toolbar-hidden',!!cfg.hideToolbar);
+  document.getElementById('app').classList.toggle('keyboard-button-hidden',cfg.showKeyboardButton===false);
+  document.getElementById('app').classList.toggle('nav-buttons-hidden',cfg.showNavButtons===false);
   applyVirtualKeyboardStyle();
   initKioskBoard();
   resetIdleTimer();

@@ -113,11 +113,12 @@
       </div>
       <div class="sp-tabs">
         <button class="sp-tab active" onclick="switchTab(0)">General</button>
-        <button class="sp-tab" onclick="switchTab(1)">Navigation</button>
-        <button class="sp-tab" onclick="switchTab(2)">Security</button>
-        <button class="sp-tab" onclick="switchTab(3)">Domains</button>
-        <button class="sp-tab" onclick="switchTab(4)">System</button>
-        <button class="sp-tab" onclick="switchTab(5)">Logs</button>
+        <button class="sp-tab" onclick="switchTab(1)">Interface</button>
+        <button class="sp-tab" onclick="switchTab(2)">Navigation</button>
+        <button class="sp-tab" onclick="switchTab(3)">Security</button>
+        <button class="sp-tab" onclick="switchTab(4)">Domains</button>
+        <button class="sp-tab" onclick="switchTab(5)">System</button>
+        <button class="sp-tab" onclick="switchTab(6)">Logs</button>
       </div>
       <div class="sp-sidebar-actions">
         <button class="sp-sidebar-exit" id="sidebar-exit-btn" onclick="showExitConfirm()">EXIT APP</button>
@@ -151,8 +152,28 @@
       </div>
     </div>
 
-    <!-- Tab 1: Quick-nav Buttons -->
+    <!-- Tab 1: Interface -->
     <div class="sp-pane" id="tab-1">
+      <div class="sp-section">
+        <div class="sp-label">Toolbar</div>
+        <div class="toggle-row">
+          <div><div class="toggle-label">Hide Toolbar</div><div class="toggle-desc">Remove the full top toolbar during kiosk use</div></div>
+          <label class="toggle"><input type="checkbox" id="tog-hide-toolbar"><span class="toggle-slider"></span></label>
+        </div>
+        <div class="toggle-row">
+          <div><div class="toggle-label">Show Keyboard Button</div><div class="toggle-desc">Display the keyboard force-trigger icon in the navigation bar</div></div>
+          <label class="toggle"><input type="checkbox" id="tog-show-keyboard-btn"><span class="toggle-slider"></span></label>
+        </div>
+        <div class="toggle-row">
+          <div><div class="toggle-label">Show Back / Forward Buttons</div><div class="toggle-desc">Display browser back and forward controls beside the address bar</div></div>
+          <label class="toggle"><input type="checkbox" id="tog-show-nav-buttons"><span class="toggle-slider"></span></label>
+        </div>
+        <div class="sp-help" style="margin-top:10px">When the toolbar is hidden, open admin by tapping 5 times in a row on the top-left corner.</div>
+      </div>
+    </div>
+
+    <!-- Tab 2: Quick-nav Buttons -->
+    <div class="sp-pane" id="tab-2">
       <div class="sp-section">
         <div class="sp-label">Quick Navigation Buttons</div>
         <div class="sp-help">Buttons appear in the topbar. Drag to reorder. Each button navigates to a URL when clicked.</div>
@@ -166,8 +187,8 @@
       </div>
     </div>
 
-    <!-- Tab 2: Security -->
-    <div class="sp-pane" id="tab-2">
+    <!-- Tab 3: Security -->
+    <div class="sp-pane" id="tab-3">
       <div class="sp-section">
         <div class="sp-label">Browser Controls</div>
         <div class="toggle-row">
@@ -193,8 +214,8 @@
       </div>
     </div>
 
-    <!-- Tab 3: Domains -->
-    <div class="sp-pane" id="tab-3">
+    <!-- Tab 4: Domains -->
+    <div class="sp-pane" id="tab-4">
       <div class="sp-section">
         <div class="sp-label">Domain Allow List</div>
         <div class="sp-help">Subdomains automatically included. Leave empty to allow all. When active, a transparent guard overlay intercepts all iframe clicks and checks the destination domain before navigating.</div>
@@ -213,8 +234,8 @@
       </div>
     </div>
 
-    <!-- Tab 4: Admin -->
-    <div class="sp-pane" id="tab-4">
+    <!-- Tab 5: Admin -->
+    <div class="sp-pane" id="tab-5">
       <div class="sp-section">
         <div class="sp-label">Admin PIN Lock</div>
         <div class="sp-help">Set a 4-digit PIN to protect settings. Leave new PIN blank to remove lock.</div>
@@ -224,14 +245,6 @@
           <input class="sp-input" id="cfg-pin-confirm" type="password" placeholder="Confirm new PIN" maxlength="4">
         </div>
         <button class="sp-btn" onclick="savePIN()" style="width:100%">UPDATE PIN</button>
-      </div>
-      <div class="sp-section">
-        <div class="sp-label">Admin Access</div>
-        <div class="toggle-row">
-          <div><div class="toggle-label">Hide Toolbar</div><div class="toggle-desc">Remove the top toolbar during kiosk use</div></div>
-          <label class="toggle"><input type="checkbox" id="tog-hide-toolbar"><span class="toggle-slider"></span></label>
-        </div>
-        <div class="sp-help" style="margin-top:10px">When the toolbar is hidden, open admin by tapping 5 times in a row on the top-left corner (where the logo is).</div>
       </div>
       <div class="sp-section">
         <div class="sp-label">Virtual Keyboard</div>
@@ -314,8 +327,8 @@
       </div>
     </div>
 
-    <!-- Tab 5: Log -->
-    <div class="sp-pane" id="tab-5">
+    <!-- Tab 6: Log -->
+    <div class="sp-pane" id="tab-6">
       <div class="sp-section">
         <div class="sp-label">Activity Log</div>
         <div id="activity-log"><div class="log-entry"><span class="log-info">No activity yet.</span></div></div>
