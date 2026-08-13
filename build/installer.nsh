@@ -22,6 +22,13 @@
 !macro customInit
   SetOverwrite on
   !insertmacro KillKioskShell
+  DetailPrint "Bypassing old broken uninstall registration..."
+  SetRegView 64
+  DeleteRegKey HKCU "${UNINSTALL_REGISTRY_KEY}"
+  DeleteRegKey HKLM "${UNINSTALL_REGISTRY_KEY}"
+  SetRegView 32
+  DeleteRegKey HKCU "${UNINSTALL_REGISTRY_KEY}"
+  DeleteRegKey HKLM "${UNINSTALL_REGISTRY_KEY}"
 !macroend
 
 !macro customUnInit
