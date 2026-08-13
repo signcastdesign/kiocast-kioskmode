@@ -10,9 +10,9 @@
     "dist": "electron-builder"
   },
   "build": {
-    "appId": "com.kiocast.kioskshell",
-    "productName": "KIOCAST KioskShell",
-    "artifactName": "${productName} Setup ${version}.${ext}",
+    "appId": "com.kioskshell.app",
+    "productName": "KioskShell",
+    "artifactName": "KIOCAST KioskShell Setup ${version}.${ext}",
     "mac": {
       "target": "dmg"
     },
