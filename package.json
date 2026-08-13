@@ -12,7 +12,7 @@
   "build": {
     "appId": "com.kioskshell.app",
     "productName": "KioskShell",
-    "artifactName": "KIOCAST KioskShell Setup ${version}-${arch}.${ext}",
+    "artifactName": "KIOCAST-KioskShell-Setup-${version}-${arch}.${ext}",
     "mac": {
       "target": "dmg"
     },
