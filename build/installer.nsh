@@ -6,9 +6,17 @@
 
 !macro KillKioskShell
   DetailPrint "Stopping running ${PRODUCT_NAME} processes..."
-  nsExec::ExecToLog '%SYSTEMROOT%\System32\cmd.exe /c taskkill /F /IM "${APP_EXECUTABLE_FILENAME}"'
+  nsExec::ExecToLog '%SYSTEMROOT%\System32\cmd.exe /c taskkill /F /T /IM "${APP_EXECUTABLE_FILENAME}" 2>NUL'
+  Pop $0
+  nsExec::ExecToLog '%SYSTEMROOT%\System32\cmd.exe /c taskkill /F /T /IM "KioskShell.exe" 2>NUL'
+  Pop $0
+  nsExec::ExecToLog '%SYSTEMROOT%\System32\cmd.exe /c taskkill /F /T /IM "KIOCAST KioskShell.exe" 2>NUL'
   Pop $0
   Sleep 1000
+!macroend
+
+!macro customCheckAppRunning
+  !insertmacro KillKioskShell
 !macroend
 
 !macro customInit
