@@ -1,7 +1,8 @@
 {
   "name": "kioskshell",
-  "version": "1.1.0",
-  "description": "KioskShell — Electron kiosk browser",
+  "version": "1.1.1",
+  "description": "KIOCAST KioskShell - secure touch kiosk browser",
+  "author": "SignCast Design",
   "main": "src/main/main.js",
   "scripts": {
     "start": "electron . --no-sandbox --disable-gpu",
@@ -9,8 +10,9 @@
     "dist": "electron-builder"
   },
   "build": {
-    "appId": "com.kioskshell.app",
-    "productName": "KioskShell",
+    "appId": "com.kiocast.kioskshell",
+    "productName": "KIOCAST KioskShell",
+    "artifactName": "${productName} Setup ${version}.${ext}",
     "mac": {
       "target": "dmg"
     },
@@ -19,10 +21,15 @@
     },
     "nsis": {
       "oneClick": false,
+      "allowElevation": true,
       "allowToChangeInstallationDirectory": true,
       "perMachine": false,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
+      "shortcutName": "KIOCAST KioskShell",
+      "menuCategory": "KIOCAST",
+      "uninstallDisplayName": "KIOCAST KioskShell",
+      "deleteAppDataOnUninstall": true,
       "runAfterFinish": false,
       "include": "build/installer.nsh"
     },

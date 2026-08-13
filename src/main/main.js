@@ -24,6 +24,7 @@ let win;
 let forceFullscreen = false;
 let lastVirtualKeyFrameId = null;
 let allowAppExit = false;
+let virtualKeyStateCache = { time: 0, value: { hasEditable: false, recentClick: false } };
 const EDITABLE_CHECK = `(() => {
   if (!window.__ksTrackInit) {
     window.__ksTrackInit = true;
@@ -297,8 +298,14 @@ ipcMain.on('virtual-key', async (_ev, payload = {}) => {
 
 ipcMain.handle('virtual-key-state', async () => {
   if (!win) return { hasEditable: false, recentClick: false };
+  const now = Date.now();
+  if (now - virtualKeyStateCache.time < 500) return virtualKeyStateCache.value;
   const res = await findActiveEditableFrame(win.webContents);
-  return { hasEditable: !!res, recentClick: res ? res.recentClick : false };
+  virtualKeyStateCache = {
+    time: now,
+    value: { hasEditable: !!res, recentClick: res ? res.recentClick : false }
+  };
+  return virtualKeyStateCache.value;
 });
 
 /** Hard refresh — reload the shell, bypassing the HTTP cache. */
@@ -376,6 +383,11 @@ ipcMain.handle('exit-app', async () => {
 app.whenReady().then(() => {
   // Strip headers that block iframe embedding (X-Frame-Options, CSP frame-ancestors)
   session.defaultSession.webRequest.onHeadersReceived({ urls: ['*://*/*'] }, (details, callback) => {
+    if (details.resourceType && !['mainFrame', 'subFrame'].includes(details.resourceType)) {
+      callback({ cancel: false, responseHeaders: details.responseHeaders });
+      return;
+    }
+
     const originalHeaders = details.responseHeaders || {};
     const newHeaders = {};
     

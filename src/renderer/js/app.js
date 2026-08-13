@@ -33,6 +33,7 @@ let vkManualHideTimer=null;
 let vkLastPointerIntentAt=0;
 let vkProbeTimer=null;
 let vkForcedOpen=false;
+let vkStateCheckPending=false;
 
 
 /* ═══════════════════════════════════════════════════
@@ -40,12 +41,12 @@ let vkForcedOpen=false;
 ═══════════════════════════════════════════════════ */
 function loadCfg(){try{const s=localStorage.getItem('ks_cfg');if(s)cfg={...cfg,...JSON.parse(s)}}catch(e){}try{const l=localStorage.getItem('ks_log');if(l)activityLog=JSON.parse(l)}catch(e){}}
 function saveCfg(){try{localStorage.setItem('ks_cfg',JSON.stringify(cfg))}catch(e){}}
-function saveLog(){try{localStorage.setItem('ks_log',JSON.stringify(activityLog.slice(-300)))}catch(e){}}
+function saveLog(){try{localStorage.setItem('ks_log',JSON.stringify(activityLog))}catch(e){}}
 
 /* ═══════════════════════════════════════════════════
    ACTIVITY LOG
 ═══════════════════════════════════════════════════ */
-function log(type,msg){const ts=new Date().toTimeString().slice(0,8);activityLog.push({ts,type,msg});saveLog()}
+function log(type,msg){const ts=new Date().toTimeString().slice(0,8);activityLog.push({ts,type,msg});if(activityLog.length>300)activityLog=activityLog.slice(-300);saveLog()}
 function renderLog(){const el=document.getElementById('activity-log');if(!activityLog.length){el.innerHTML='<div class="log-entry"><span class="log-info">No activity yet.</span></div>';return}el.innerHTML=activityLog.slice().reverse().slice(0,150).map(e=>`<div class="log-entry"><span class="log-time">${e.ts}</span><span class="log-${e.type}">${e.msg.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</span></div>`).join('')}
 function clearActivity(){activityLog=[];saveLog();renderLog();showToast('Log cleared','ok')}
 
@@ -223,10 +224,16 @@ function vkKeyLabel(key){
   return {Bksp:'⌫',Enter:'↵',Left:'←',Right:'→',Hide:'Hide',Shift:'Shift',Space:'Space'}[key]||key;
 }
 
-function renderVirtualKeyboard(){
+function renderVirtualKeyboard(force=false){
   const rowsEl=document.getElementById('vk-rows');
   const badge=document.getElementById('vk-layout-badge');
   if(!rowsEl||!badge)return;
+  const signature=`${cfg.vkLayout||'en'}|${cfg.vkMode||'fixed'}|${vkShift?'1':'0'}`;
+  if(!force&&rowsEl.dataset.signature===signature&&rowsEl.children.length){
+    badge.textContent=`${(cfg.vkLayout||'en').toUpperCase()} / ${(cfg.vkMode||'fixed').toUpperCase()}`;
+    return;
+  }
+  rowsEl.dataset.signature=signature;
   rowsEl.innerHTML='';
   badge.textContent=`${(cfg.vkLayout||'en').toUpperCase()} / ${(cfg.vkMode||'fixed').toUpperCase()}`;
   getCurrentVkLayout().forEach(row=>{
@@ -956,7 +963,12 @@ window.addEventListener('resize',()=>applyVirtualKeyboardStyle());
    the keyboard correctly. */
 setInterval(()=>{
   if(!cfg.vkEnabled||!cfg.vkAutoShow||vkManualHidden)return;
+  if(vkStateCheckPending)return;
+  if(document.getElementById('settings-overlay')?.classList.contains('open'))return;
+  if(document.getElementById('pin-overlay')?.classList.contains('show'))return;
   if(document.activeElement!==frame)return;
+  if(!isVirtualKeyboardVisible()&&!vkFrameFocused&&!vkForcedOpen&&!hasRecentVirtualKeyboardPointerIntent())return;
+  vkStateCheckPending=true;
   window.kioskElectron?.getVirtualKeyState?.().then(state=>{
     if(document.activeElement!==frame)return;
     if(state?.hasEditable){
@@ -968,8 +980,8 @@ setInterval(()=>{
       vkFrameFocused=false;
       queueVirtualKeyboardHide();
     }
-  }).catch(()=>{});
-},400);
+  }).catch(()=>{}).finally(()=>{vkStateCheckPending=false;});
+},1000);
 
 /* ═══════════════════════════════════════════════════
    IDLE
