@@ -36,6 +36,7 @@ let vkForcedOpen=false;
 let vkStateCheckPending=false;
 let vkIframeProbeUntil=0;
 let exitInProgress=false;
+let activeConfirmResolve=null;
 
 
 /* ═══════════════════════════════════════════════════
@@ -208,6 +209,7 @@ function kioskBoardRows(){
   const skip=new Set(['Shift','Bksp','Enter','Hide','Space','Left','Right']);
   return (layout.default||VK_LAYOUTS.en.default)
     .map(row=>row.filter(key=>!skip.has(key)))
+    .filter(row=>cfg.vkLayout==='numeric'||!row.every(key=>/^\d$/.test(key)))
     .filter(row=>row.length)
     .map(row=>Object.fromEntries(row.map((key,i)=>[String(i),key])));
 }
@@ -611,7 +613,17 @@ function hideVirtualKeyboard(immediate=false,reason='hide'){
 
 function toggleManualVirtualKeyboard(){
   initKioskBoard();
-  showToast('Tap a text field to open keyboard','ok');
+  const target=getVirtualKeyboardTarget();
+  if(target){
+    resetVirtualKeyboardManualHide();
+    markVirtualKeyboardPointerIntent();
+    target.classList.add(KIOSKBOARD_SELECTOR.slice(1));
+    target.focus({preventScroll:true});
+    target.click?.();
+    showToast('Keyboard opened','ok');
+    return;
+  }
+  showToast('Select a text field first','ok');
 }
 
 function syncVirtualKeyboardToFocus(){
@@ -1087,7 +1099,11 @@ function showToast(msg,type=''){const t=document.getElementById('toast');t.textC
 /* ═══════════════════════════════════════════════════
    FACTORY RESET
 ═══════════════════════════════════════════════════ */
-function factoryReset(){if(!confirm('Reset all KioskShell settings? This cannot be undone.'))return;localStorage.removeItem('ks_cfg');localStorage.removeItem('ks_log');location.reload()}
+async function factoryReset(){
+  const ok=await showConfirmDialog({title:'Factory Reset?',copy:'Reset all KioskShell settings. This cannot be undone.',confirmText:'RESET',danger:true});
+  if(!ok)return;
+  localStorage.removeItem('ks_cfg');localStorage.removeItem('ks_log');location.reload()
+}
 
 /* ═══════════════════════════════════════════════════
    DIAGNOSTICS / DATA WIPE
@@ -1151,7 +1167,8 @@ async function downloadSoftwareUpdate(){
 }
 
 async function installSoftwareUpdate(){
-  if(!confirm('Restart KIOCAST KioskShell and install the downloaded update now?'))return;
+  const ok=await showConfirmDialog({title:'Restart & Install?',copy:'KIOCAST KioskShell will close, install the downloaded update, and restart.',confirmText:'RESTART & INSTALL',danger:true});
+  if(!ok)return;
   if(!window.kioskElectron?.installUpdate){showToast('Updater unavailable','error');return}
   log('info','Update install requested');
   renderUpdateState({status:'installing'});
@@ -1169,7 +1186,8 @@ async function clearCacheOnly(){
   showToast('Cache cleared','ok');
 }
 async function wipeAllData(){
-  if(!confirm('Wipe ALL personal data? This clears cookies, cache, and storage for the kiosked site, plus all KioskShell settings. Cannot be undone.'))return;
+  const ok=await showConfirmDialog({title:'Wipe All Data?',copy:'This clears cookies, cache, site storage, and all KioskShell settings. This cannot be undone.',confirmText:'WIPE DATA',danger:true});
+  if(!ok)return;
   if(window.kioskElectron?.wipeData)await window.kioskElectron.wipeData();
   localStorage.removeItem('ks_cfg');localStorage.removeItem('ks_log');
   location.reload();
@@ -1180,51 +1198,90 @@ async function lockdownWindows() {
     showToast('Lockdown unavailable', 'error');
     return;
   }
-  if (!confirm('This will modify Windows Registry and Services to disable the native touch keyboard and multi-finger gestures. A Windows UAC Administrator prompt will appear. Proceed?')) return;
+  const ok=await showConfirmDialog({title:'Apply Windows Lockdown?',copy:'This modifies Windows Registry and Services to disable the native touch keyboard and multi-finger gestures. A Windows UAC Administrator prompt will appear.',confirmText:'APPLY LOCKDOWN',danger:true});
+  if(!ok)return;
   
   log('info', 'Windows lockdown requested');
   try {
     await window.kioskElectron.lockdownWindows();
     showToast('Lockdown script started. Please accept the UAC prompt.', 'ok');
     setTimeout(() => {
-      alert('Windows Lockdown applied! Please RESTART your computer for all registry changes (like 4-finger gestures) to take full effect.');
+      showConfirmDialog({title:'Restart Required',copy:'Windows Lockdown was applied. Restart the computer for all registry changes, including 4-finger gestures, to take full effect.',confirmText:'OK',danger:false,hideCancel:true});
     }, 2000);
   } catch (e) {
     showToast('Lockdown failed', 'error');
   }
 }
 
-function ensureExitConfirm(){
+function ensureConfirmDialog(){
   let overlay=document.getElementById('exit-confirm');
   if(overlay)return overlay;
   overlay=document.createElement('div');
   overlay.id='exit-confirm';
-  overlay.innerHTML=`<div class="exit-card" role="dialog" aria-modal="true" aria-labelledby="exit-title">
-    <div class="exit-title" id="exit-title">Exit KioskShell?</div>
-    <div class="exit-copy">This will close the kiosk and return to Windows.</div>
+  overlay.innerHTML=`<div class="exit-card" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
+    <div class="exit-title" id="confirm-title"></div>
+    <div class="exit-copy" id="confirm-copy"></div>
     <div class="exit-actions">
-      <button class="sp-btn ghost" id="exit-cancel-btn" onclick="hideExitConfirm()">CANCEL</button>
-      <button class="sp-btn danger" id="exit-confirm-btn" onclick="exitApplication()">EXIT NOW</button>
+      <button class="sp-btn ghost" id="confirm-cancel-btn" type="button">CANCEL</button>
+      <button class="sp-btn danger" id="confirm-ok-btn" type="button">OK</button>
     </div>
   </div>`;
   document.body.appendChild(overlay);
   return overlay;
 }
 
-function showExitConfirm(){
+function resolveConfirmDialog(value){
+  const overlay=document.getElementById('exit-confirm');
+  overlay?.classList.remove('show');
+  const resolve=activeConfirmResolve;
+  activeConfirmResolve=null;
+  if(resolve)resolve(value);
+}
+
+function showConfirmDialog({title,copy,confirmText='OK',danger=false,hideCancel=false}){
+  if(activeConfirmResolve)resolveConfirmDialog(false);
+  const overlay=ensureConfirmDialog();
+  const cancelBtn=document.getElementById('confirm-cancel-btn');
+  const okBtn=document.getElementById('confirm-ok-btn');
+  document.getElementById('confirm-title').textContent=title;
+  document.getElementById('confirm-copy').textContent=copy;
+  cancelBtn.style.display=hideCancel?'none':'';
+  cancelBtn.disabled=false;
+  okBtn.disabled=false;
+  okBtn.textContent=confirmText;
+  okBtn.className='sp-btn'+(danger?' danger':'');
+  overlay.classList.add('show');
+  return new Promise(resolve=>{
+    activeConfirmResolve=resolve;
+    const cleanup=()=>{
+      cancelBtn.onpointerdown=null;okBtn.onpointerdown=null;overlay.onpointerdown=null;
+    };
+    const finish=value=>{
+      cleanup();
+      if(value){okBtn.disabled=true;cancelBtn.disabled=true;okBtn.textContent='WORKING...'}
+      resolveConfirmDialog(value);
+    };
+    cancelBtn.onpointerdown=e=>{e.preventDefault();finish(false)};
+    okBtn.onpointerdown=e=>{e.preventDefault();finish(true)};
+    overlay.onpointerdown=e=>{if(e.target===overlay&&!hideCancel)finish(false)};
+  });
+}
+
+async function showExitConfirm(){
   if(exitInProgress)return;
-  ensureExitConfirm().classList.add('show');
+  const ok=await showConfirmDialog({title:'Exit KioskShell?',copy:'This will close the kiosk and return to Windows.',confirmText:'EXIT NOW',danger:true});
+  if(ok)exitApplication();
 }
 
 function hideExitConfirm(){
   if(exitInProgress)return;
-  document.getElementById('exit-confirm')?.classList.remove('show');
+  resolveConfirmDialog(false);
 }
 
 async function exitApplication(){
   if(exitInProgress)return;
   exitInProgress=true;
-  const btn=document.getElementById('exit-confirm-btn');
+  const btn=document.getElementById('confirm-ok-btn');
   const sidebarBtn=document.getElementById('sidebar-exit-btn');
   if(btn){btn.disabled=true;btn.textContent='EXITING...'}
   if(sidebarBtn){sidebarBtn.disabled=true;sidebarBtn.textContent='EXITING...'}

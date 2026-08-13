@@ -40,10 +40,10 @@ let keyboardConfig = { enabled: true, layout: 'en', width: 100, height: 56, font
 const kioskBoardBundlePath = path.join(__dirname, '../renderer/vendor/kioskboard/kioskboard-aio.min.js');
 const kioskBoardBundle = fs.existsSync(kioskBoardBundlePath) ? fs.readFileSync(kioskBoardBundlePath, 'utf8') : '';
 const KIOSKBOARD_ROWS = {
-  en: [['1','2','3','4','5','6','7','8','9','0'], ['q','w','e','r','t','y','u','i','o','p'], ['a','s','d','f','g','h','j','k','l'], ['z','x','c','v','b','n','m','.']],
-  fr: [['1','2','3','4','5','6','7','8','9','0'], ['a','z','e','r','t','y','u','i','o','p'], ['q','s','d','f','g','h','j','k','l','m'], ['w','x','c','v','b','n',',','.']],
-  de: [['1','2','3','4','5','6','7','8','9','0'], ['q','w','e','r','t','z','u','i','o','p'], ['a','s','d','f','g','h','j','k','l','ö'], ['y','x','c','v','b','n','m','ü']],
-  es: [['1','2','3','4','5','6','7','8','9','0'], ['q','w','e','r','t','y','u','i','o','p'], ['a','s','d','f','g','h','j','k','l','ñ'], ['z','x','c','v','b','n','m',',']]
+  en: [['q','w','e','r','t','y','u','i','o','p'], ['a','s','d','f','g','h','j','k','l'], ['z','x','c','v','b','n','m','.']],
+  fr: [['a','z','e','r','t','y','u','i','o','p'], ['q','s','d','f','g','h','j','k','l','m'], ['w','x','c','v','b','n',',','.']],
+  de: [['q','w','e','r','t','z','u','i','o','p'], ['a','s','d','f','g','h','j','k','l','ö'], ['y','x','c','v','b','n','m','ü']],
+  es: [['q','w','e','r','t','y','u','i','o','p'], ['a','s','d','f','g','h','j','k','l','ñ'], ['z','x','c','v','b','n','m',',']]
 };
 
 function kioskBoardRowsFor(layout) {
@@ -401,6 +401,9 @@ function createWindow() {
   });
   win.webContents.on('did-frame-finish-load', () => {
     setTimeout(() => injectKioskBoardIntoFrames(win && win.webContents), 250);
+  });
+  win.webContents.on('will-prevent-unload', event => {
+    event.preventDefault();
   });
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   win.webContents.on('before-input-event', (event, input) => {
