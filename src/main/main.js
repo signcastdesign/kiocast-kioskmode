@@ -37,24 +37,29 @@ let updateState = {
   error: null
 };
 const EDITABLE_CHECK = `(() => {
+  const isEditable = (el) => {
+    if (!el) return false;
+    if (el.matches?.('textarea')) return !el.readOnly && !el.disabled;
+    if (el.matches?.('input')) {
+      const type = (el.type || 'text').toLowerCase();
+      if (!['button','checkbox','color','file','hidden','image','radio','range','reset','submit'].includes(type)) {
+        return !el.readOnly && !el.disabled;
+      }
+      return false;
+    }
+    return !!el.isContentEditable;
+  };
   if (!window.__ksTrackInit) {
     window.__ksTrackInit = true;
-    window.__ksLastClick = 0;
-    window.addEventListener('pointerdown', () => { window.__ksLastClick = Date.now(); }, true);
+    window.__ksLastEditablePointer = 0;
+    window.addEventListener('pointerdown', (event) => {
+      if (isEditable(event.target)) window.__ksLastEditablePointer = Date.now();
+    }, true);
   }
   const el = document.activeElement;
   if (!el) return { editable: false };
-  let editable = false;
-  if (el.matches?.('textarea')) editable = !el.readOnly && !el.disabled;
-  else if (el.matches?.('input')) {
-    const type = (el.type || 'text').toLowerCase();
-    if (!['button','checkbox','color','file','hidden','image','radio','range','reset','submit'].includes(type)) {
-      editable = !el.readOnly && !el.disabled;
-    }
-  } else {
-    editable = !!el.isContentEditable;
-  }
-  return { editable, recentClick: (Date.now() - window.__ksLastClick) < 2000 };
+  const editable = isEditable(el);
+  return { editable, recentClick: (Date.now() - window.__ksLastEditablePointer) < 900 };
 })()`;
 
 async function findActiveEditableFrame(webContents) {
@@ -570,10 +575,13 @@ ipcMain.handle('lockdown-windows', async () => {
 
 ipcMain.handle('exit-app', async () => {
   enableAppExit();
+  app.removeAllListeners('window-all-closed');
   if (win && !win.isDestroyed()) {
-    win.destroy();
+    try { win.removeAllListeners('close'); } catch (_) {}
+    try { win.setClosable(true); } catch (_) {}
+    try { win.destroy(); } catch (_) {}
   }
-  app.quit();
+  setTimeout(() => app.exit(0), 50);
   return true;
 });
 

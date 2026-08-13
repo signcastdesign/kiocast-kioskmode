@@ -119,6 +119,9 @@
         <button class="sp-tab" onclick="switchTab(4)">System</button>
         <button class="sp-tab" onclick="switchTab(5)">Logs</button>
       </div>
+      <div class="sp-sidebar-actions">
+        <button class="sp-sidebar-exit" id="sidebar-exit-btn" onclick="showExitConfirm()">EXIT APP</button>
+      </div>
     </div>
 
     <!-- Main Content Area -->
@@ -307,9 +310,6 @@
         <div class="sp-row" style="gap:8px;flex-wrap:wrap;margin-top:8px">
           <button class="sp-btn danger" onclick="factoryReset()" style="flex:1">FACTORY RESET</button>
           <button class="sp-btn danger" onclick="wipeAllData()" style="flex:1">WIPE ALL DATA</button>
-        </div>
-        <div class="sp-row" style="gap:8px;flex-wrap:wrap;margin-top:8px">
-          <button class="sp-btn danger" onclick="exitApplication()" style="flex:1">EXIT APP</button>
         </div>
       </div>
     </div>

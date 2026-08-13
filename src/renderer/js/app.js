@@ -34,12 +34,14 @@ let vkLastPointerIntentAt=0;
 let vkProbeTimer=null;
 let vkForcedOpen=false;
 let vkStateCheckPending=false;
+let vkIframeProbeUntil=0;
+let exitInProgress=false;
 
 
 /* ═══════════════════════════════════════════════════
    PERSISTENCE
 ═══════════════════════════════════════════════════ */
-function loadCfg(){try{const s=localStorage.getItem('ks_cfg');if(s)cfg={...cfg,...JSON.parse(s)}}catch(e){}try{const l=localStorage.getItem('ks_log');if(l)activityLog=JSON.parse(l)}catch(e){}}
+function loadCfg(){try{const s=localStorage.getItem('ks_cfg');if(s)cfg={...cfg,...JSON.parse(s)};cfg.domains=dedupeDomains(cfg.domains||[])}catch(e){}try{const l=localStorage.getItem('ks_log');if(l)activityLog=JSON.parse(l)}catch(e){}}
 function saveCfg(){try{localStorage.setItem('ks_cfg',JSON.stringify(cfg))}catch(e){}}
 function saveLog(){try{localStorage.setItem('ks_log',JSON.stringify(activityLog))}catch(e){}}
 
@@ -94,6 +96,7 @@ function saveSettings(){
   cfg.vkHeight=parseInt(document.getElementById('cfg-vk-height').value)||56;
   cfg.vkFont=parseInt(document.getElementById('cfg-vk-font').value)||20;
   cfg.idleTimeout=parseInt(document.getElementById('cfg-idle').value)||0;
+  cfg.domains=dedupeDomains(cfg.domains);
   saveCfg();applySettings();closeSettings();
   if(newUrl&&newUrl!==cfg.url){cfg.url=newUrl;saveCfg();navigateTo(newUrl)}
   log('info','Settings saved');showToast('Settings saved','ok');
@@ -322,7 +325,7 @@ function setupIframeKeyboardTracking(){
         vkFrameFocused=true;
         vkKeepVisibleUntil=Date.now()+1500;
         clearTimeout(vkHideTimer);
-        if(cfg.vkEnabled&&cfg.vkAutoShow&&(hasRecentVirtualKeyboardPointerIntent()||isVirtualKeyboardVisible()))showVirtualKeyboard('iframe-active');
+        if(cfg.vkEnabled&&cfg.vkAutoShow&&hasRecentVirtualKeyboardPointerIntent())showVirtualKeyboard('iframe-active');
         return;
       }
       if(vkTarget&&vkTarget.ownerDocument===doc)vkTarget=null;
@@ -335,7 +338,7 @@ function setupIframeKeyboardTracking(){
         vkFrameFocused=true;
         vkKeepVisibleUntil=Date.now()+1500;
         clearTimeout(vkHideTimer);
-        if(cfg.vkEnabled&&cfg.vkAutoShow&&(hasRecentVirtualKeyboardPointerIntent()||isVirtualKeyboardVisible()))showVirtualKeyboard('iframe-focusin');
+        if(cfg.vkEnabled&&cfg.vkAutoShow&&hasRecentVirtualKeyboardPointerIntent())showVirtualKeyboard('iframe-focusin');
       }
     },true);
     doc.addEventListener('focusout',e=>{
@@ -405,7 +408,16 @@ function markVirtualKeyboardPointerIntent(){
 }
 
 function hasRecentVirtualKeyboardPointerIntent(){
-  return Date.now()-vkLastPointerIntentAt<1500;
+  return Date.now()-vkLastPointerIntentAt<900;
+}
+
+function resetVirtualKeyboardIntent(){
+  vkLastPointerIntentAt=0;
+  vkIframeProbeUntil=0;
+  vkKeepVisibleUntil=0;
+  vkFrameFocused=false;
+  vkTarget=null;
+  cancelVirtualKeyboardProbe();
 }
 
 function isVirtualKeyboardVisible(){
@@ -425,6 +437,7 @@ function cancelVirtualKeyboardProbe(){
 function scheduleIframeKeyboardProbe(attempt=0){
   cancelVirtualKeyboardProbe();
   if(!cfg.vkEnabled||!cfg.vkAutoShow||vkManualHidden)return;
+  if(!hasRecentVirtualKeyboardPointerIntent()&&Date.now()>vkIframeProbeUntil)return;
   Promise.resolve(window.kioskElectron?.getVirtualKeyState?.())
     .then(state=>{
       const target=getIframeVirtualKeyboardTarget();
@@ -435,10 +448,10 @@ function scheduleIframeKeyboardProbe(attempt=0){
         vkFrameFocused=true;
         vkKeepVisibleUntil=Date.now()+1200;
         clearTimeout(vkHideTimer);
-        if(recentClick||isVirtualKeyboardVisible())showVirtualKeyboard('iframe-probe');
+        if(recentClick)showVirtualKeyboard('iframe-probe');
         return;
       }
-      if(attempt>=6||!hasRecentVirtualKeyboardPointerIntent()){
+      if(attempt>=6||(!hasRecentVirtualKeyboardPointerIntent()&&Date.now()>vkIframeProbeUntil)){
         if(!isVirtualKeyboardVisible()){
           vkFrameFocused=false;
           queueVirtualKeyboardHide();
@@ -448,7 +461,7 @@ function scheduleIframeKeyboardProbe(attempt=0){
       vkProbeTimer=setTimeout(()=>scheduleIframeKeyboardProbe(attempt+1),80);
     })
     .catch(()=>{
-      if(attempt>=6||!hasRecentVirtualKeyboardPointerIntent()){
+      if(attempt>=6||(!hasRecentVirtualKeyboardPointerIntent()&&Date.now()>vkIframeProbeUntil)){
         if(!isVirtualKeyboardVisible()){
           vkFrameFocused=false;
           queueVirtualKeyboardHide();
@@ -535,7 +548,7 @@ function syncVirtualKeyboardToFocus(){
   if(!cfg.vkAutoShow){hideVirtualKeyboard(true,'autoshow-off');return;}
   if(vkManualHidden){hideVirtualKeyboard(true,'manual-latched');return;}
   const target=getVirtualKeyboardTarget();
-  if(target&&(hasRecentVirtualKeyboardPointerIntent()||isVirtualKeyboardVisible()||Date.now()<vkKeepVisibleUntil))showVirtualKeyboard('sync-focus');
+  if(target&&hasRecentVirtualKeyboardPointerIntent())showVirtualKeyboard('sync-focus');
   else hideVirtualKeyboard(true,'sync-hide');
 }
 
@@ -552,7 +565,7 @@ function queueVirtualKeyboardHide(){
       return;
     }
     const target=getVirtualKeyboardTarget();
-    if(target&&(hasRecentVirtualKeyboardPointerIntent()||isVirtualKeyboardVisible()||Date.now()<vkKeepVisibleUntil)){
+    if(target&&(vkForcedOpen||hasRecentVirtualKeyboardPointerIntent())){
       showVirtualKeyboard('hide-cancelled');
       return;
     }
@@ -651,7 +664,24 @@ function renderDomainList(){
   html+=cfg.domains.map((d,i)=>`<div class="domain-tag"><div class="dt-info"><span>&#10003; ${escH(d)}</span><span class="dt-sub">+subdomains</span></div><button onclick="removeDomain(${i})" title="Remove">&#x2715;</button></div>`).join('');
   el.innerHTML=html;
 }
-function addDomain(){let v=document.getElementById('domain-input').value.trim().toLowerCase();if(!v)return;v=v.replace(/^https?:\/\//,'').replace(/\/.*$/,'').replace(/^www\./,'');if(cfg.domains.includes(v)){showToast('Already in list','error');return}cfg.domains.push(v);document.getElementById('domain-input').value='';renderDomainList()}
+function normalizeDomainEntry(value){
+  let v=String(value||'').trim().toLowerCase();
+  if(!v)return '';
+  v=v.replace(/^https?:\/\//,'').replace(/^\*\./,'').replace(/\/.*$/,'').replace(/:\d+$/,'').replace(/^www\./,'').replace(/\.+$/,'');
+  return v;
+}
+function dedupeDomains(domains){
+  const seen=new Set();
+  return domains.map(normalizeDomainEntry).filter(d=>d&&!seen.has(d)&&seen.add(d));
+}
+function addDomain(){
+  const input=document.getElementById('domain-input');
+  const v=normalizeDomainEntry(input.value);
+  if(!v)return;
+  cfg.domains=dedupeDomains(cfg.domains);
+  if(cfg.domains.includes(v)||getImplicitDomains().includes(v)){showToast('Domain already exists','error');input.value='';renderDomainList();return}
+  cfg.domains.push(v);input.value='';renderDomainList();showToast('Domain added','ok')
+}
 function removeDomain(i){cfg.domains.splice(i,1);renderDomainList()}
 
 /* ═══════════════════════════════════════════════════
@@ -739,13 +769,14 @@ function escH(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').rep
    NAVIGATION & DOMAIN GUARD
 ═══════════════════════════════════════════════════ */
 function normalizeUrl(u){return(u.startsWith('http://')||u.startsWith('https://'))?u:'https://'+u}
-function extractDomain(u){try{return new URL(normalizeUrl(u)).hostname.replace(/^www\./,'')}catch(e){return u}}
-function getImplicitDomains(){const s=new Set();if(cfg.url){try{s.add(new URL(normalizeUrl(cfg.url)).hostname.replace(/^www\./,''))}catch(e){}}cfg.quickNavBtns.forEach(b=>{try{s.add(new URL(normalizeUrl(b.url)).hostname.replace(/^www\./,''))}catch(e){}});return[...s].filter(Boolean)}
+function extractDomain(u){try{return normalizeDomainEntry(new URL(normalizeUrl(u)).hostname)}catch(e){return normalizeDomainEntry(u)}}
+function getImplicitDomains(){const s=new Set();if(cfg.url){try{s.add(normalizeDomainEntry(new URL(normalizeUrl(cfg.url)).hostname))}catch(e){}}cfg.quickNavBtns.forEach(b=>{try{s.add(normalizeDomainEntry(new URL(normalizeUrl(b.url)).hostname))}catch(e){}});return[...s].filter(Boolean)}
 function isDomainAllowed(d){if(!cfg.domains.length)return true;if(getImplicitDomains().some(x=>d===x||d.endsWith('.'+x)))return true;return cfg.domains.some(x=>d===x||d.endsWith('.'+x))}
 
 function applyUrl(){const v=document.getElementById('cfg-url').value.trim();if(!v)return;cfg.url=v;saveCfg();navigateTo(v)}
 function navigateTo(url){
-  vkLastPointerIntentAt = 0;
+  resetVirtualKeyboardIntent();
+  hideVirtualKeyboard(true,'navigation');
   url=normalizeUrl(url);
   const domain=extractDomain(url);
   if(!isDomainAllowed(domain)){showBlockScreen(domain);log('block','Blocked: '+url);return}
@@ -756,16 +787,17 @@ function navigateTo(url){
   navHistory=navHistory.slice(0,navIndex+1);navHistory.push(url);navIndex=navHistory.length-1;
   updateNavButtons();log('ok','Loaded: '+url);
 }
-function historyBack(){vkLastPointerIntentAt=0;if(navIndex<=0)return;navIndex--;const u=navHistory[navIndex];startLoadBar();document.getElementById('site-frame').src=u;updateUrlBar(u);updateNavButtons()}
-function historyFwd(){vkLastPointerIntentAt=0;if(navIndex>=navHistory.length-1)return;navIndex++;const u=navHistory[navIndex];startLoadBar();document.getElementById('site-frame').src=u;updateUrlBar(u);updateNavButtons()}
-function reloadFrame(){vkLastPointerIntentAt=0;const f=document.getElementById('site-frame');startLoadBar();try{f.contentWindow.location.reload()}catch(e){f.src=f.src}}
+function historyBack(){resetVirtualKeyboardIntent();hideVirtualKeyboard(true,'navigation');if(navIndex<=0)return;navIndex--;const u=navHistory[navIndex];startLoadBar();document.getElementById('site-frame').src=u;updateUrlBar(u);updateNavButtons()}
+function historyFwd(){resetVirtualKeyboardIntent();hideVirtualKeyboard(true,'navigation');if(navIndex>=navHistory.length-1)return;navIndex++;const u=navHistory[navIndex];startLoadBar();document.getElementById('site-frame').src=u;updateUrlBar(u);updateNavButtons()}
+function reloadFrame(){resetVirtualKeyboardIntent();hideVirtualKeyboard(true,'navigation');const f=document.getElementById('site-frame');startLoadBar();try{f.contentWindow.location.reload()}catch(e){f.src=f.src}}
 function updateNavButtons(){document.getElementById('nav-back').disabled=navIndex<=0;document.getElementById('nav-fwd').disabled=navIndex>=navHistory.length-1}
 
 const frame=document.getElementById('site-frame');
 
 frame.addEventListener('load',()=>{
   stopLoadBar();document.getElementById('status-dot').className='live';
-  vkFrameFocused=false;
+  resetVirtualKeyboardIntent();
+  hideVirtualKeyboard(true,'frame-load');
   vkIframeDoc=null;
   setTimeout(setupIframeKeyboardTracking,120);
   if(cfg.strictMode){
@@ -797,7 +829,7 @@ window.addEventListener('message',e=>{
   }
   if(data.type==='vk-focus'){
     vkFrameFocused=!!data.focused;
-    if(vkFrameFocused&&(hasRecentVirtualKeyboardPointerIntent()||isVirtualKeyboardVisible())){
+    if(vkFrameFocused&&hasRecentVirtualKeyboardPointerIntent()){
       resetVirtualKeyboardManualHide();
       vkKeepVisibleUntil=Date.now()+1500;
       showVirtualKeyboard('message-focus');
@@ -853,7 +885,7 @@ document.addEventListener('focusin',e=>{
     vkTarget=e.target;
     vkKeepVisibleUntil=Date.now()+1500;
     clearTimeout(vkHideTimer);
-    if(hasRecentVirtualKeyboardPointerIntent()||isVirtualKeyboardVisible())showVirtualKeyboard('host-focusin');
+    if(hasRecentVirtualKeyboardPointerIntent())showVirtualKeyboard('host-focusin');
   }
 },true);
 document.addEventListener('focusout',e=>{
@@ -877,7 +909,7 @@ document.addEventListener('pointerdown',e=>{
   if(e.target===frame){
     clearTimeout(vkHideTimer);
     resetVirtualKeyboardManualHide();
-    markVirtualKeyboardPointerIntent();
+    vkIframeProbeUntil=Date.now()+1200;
     setTimeout(()=>{
       setupIframeKeyboardTracking();
       scheduleIframeKeyboardProbe();
@@ -890,7 +922,7 @@ document.addEventListener('pointerdown',e=>{
   queueVirtualKeyboardHide();
 },true);
 frame.addEventListener('focus',()=>{
-  markVirtualKeyboardPointerIntent();
+  vkIframeProbeUntil=Date.now()+900;
   setTimeout(()=>{
     setupIframeKeyboardTracking();
     scheduleIframeKeyboardProbe();
@@ -967,7 +999,7 @@ setInterval(()=>{
   if(document.getElementById('settings-overlay')?.classList.contains('open'))return;
   if(document.getElementById('pin-overlay')?.classList.contains('show'))return;
   if(document.activeElement!==frame)return;
-  if(!isVirtualKeyboardVisible()&&!vkFrameFocused&&!vkForcedOpen&&!hasRecentVirtualKeyboardPointerIntent())return;
+  if(!vkForcedOpen&&!hasRecentVirtualKeyboardPointerIntent()&&Date.now()>vkIframeProbeUntil)return;
   vkStateCheckPending=true;
   window.kioskElectron?.getVirtualKeyState?.().then(state=>{
     if(document.activeElement!==frame)return;
@@ -975,7 +1007,7 @@ setInterval(()=>{
       vkFrameFocused=true;
       vkKeepVisibleUntil=Date.now()+1200;
       const recentClick=!!state?.recentClick||hasRecentVirtualKeyboardPointerIntent();
-      if(!isVirtualKeyboardVisible() && recentClick)showVirtualKeyboard('iframe-poll');
+      if(recentClick)showVirtualKeyboard('iframe-poll');
     }else if(vkFrameFocused&&!vkForcedOpen){
       vkFrameFocused=false;
       queueVirtualKeyboardHide();
@@ -1114,9 +1146,48 @@ async function lockdownWindows() {
   }
 }
 
+function ensureExitConfirm(){
+  let overlay=document.getElementById('exit-confirm');
+  if(overlay)return overlay;
+  overlay=document.createElement('div');
+  overlay.id='exit-confirm';
+  overlay.innerHTML=`<div class="exit-card" role="dialog" aria-modal="true" aria-labelledby="exit-title">
+    <div class="exit-title" id="exit-title">Exit KioskShell?</div>
+    <div class="exit-copy">This will close the kiosk and return to Windows.</div>
+    <div class="exit-actions">
+      <button class="sp-btn ghost" id="exit-cancel-btn" onclick="hideExitConfirm()">CANCEL</button>
+      <button class="sp-btn danger" id="exit-confirm-btn" onclick="exitApplication()">EXIT NOW</button>
+    </div>
+  </div>`;
+  document.body.appendChild(overlay);
+  return overlay;
+}
+
+function showExitConfirm(){
+  if(exitInProgress)return;
+  ensureExitConfirm().classList.add('show');
+}
+
+function hideExitConfirm(){
+  if(exitInProgress)return;
+  document.getElementById('exit-confirm')?.classList.remove('show');
+}
+
 async function exitApplication(){
-  if(!confirm('Exit KioskShell and return to the operating system?'))return;
-  if(!window.kioskElectron?.exitApp){showToast('Exit unavailable','error');return}
+  if(exitInProgress)return;
+  exitInProgress=true;
+  const btn=document.getElementById('exit-confirm-btn');
+  const sidebarBtn=document.getElementById('sidebar-exit-btn');
+  if(btn){btn.disabled=true;btn.textContent='EXITING...'}
+  if(sidebarBtn){sidebarBtn.disabled=true;sidebarBtn.textContent='EXITING...'}
+  if(!window.kioskElectron?.exitApp){
+    exitInProgress=false;
+    if(btn){btn.disabled=false;btn.textContent='EXIT NOW'}
+    if(sidebarBtn){sidebarBtn.disabled=false;sidebarBtn.textContent='EXIT APP'}
+    showToast('Exit unavailable','error');return
+  }
+  hideVirtualKeyboard(true,'exit');
+  closeSettings();
   await window.kioskElectron.exitApp();
 }
 
