@@ -36,6 +36,86 @@ let updateState = {
   progress: 0,
   error: null
 };
+let keyboardConfig = { enabled: true, layout: 'en', width: 100, height: 56, font: 20 };
+const kioskBoardBundlePath = path.join(__dirname, '../renderer/vendor/kioskboard/kioskboard-aio.min.js');
+const kioskBoardBundle = fs.existsSync(kioskBoardBundlePath) ? fs.readFileSync(kioskBoardBundlePath, 'utf8') : '';
+const KIOSKBOARD_ROWS = {
+  en: [['1','2','3','4','5','6','7','8','9','0'], ['q','w','e','r','t','y','u','i','o','p'], ['a','s','d','f','g','h','j','k','l'], ['z','x','c','v','b','n','m','.']],
+  fr: [['1','2','3','4','5','6','7','8','9','0'], ['a','z','e','r','t','y','u','i','o','p'], ['q','s','d','f','g','h','j','k','l','m'], ['w','x','c','v','b','n',',','.']],
+  de: [['1','2','3','4','5','6','7','8','9','0'], ['q','w','e','r','t','z','u','i','o','p'], ['a','s','d','f','g','h','j','k','l','ö'], ['y','x','c','v','b','n','m','ü']],
+  es: [['1','2','3','4','5','6','7','8','9','0'], ['q','w','e','r','t','y','u','i','o','p'], ['a','s','d','f','g','h','j','k','l','ñ'], ['z','x','c','v','b','n','m',',']]
+};
+
+function kioskBoardRowsFor(layout) {
+  const rows = KIOSKBOARD_ROWS[layout] || KIOSKBOARD_ROWS.en;
+  return rows.map(row => Object.fromEntries(row.map((key, index) => [String(index), key])));
+}
+
+function getKioskBoardFrameScript() {
+  const config = keyboardConfig;
+  const rows = kioskBoardRowsFor(config.layout);
+  return `(() => {
+    if (!${JSON.stringify(!!config.enabled)}) return;
+    const skipTypes = ['button','checkbox','color','file','hidden','image','radio','range','reset','submit'];
+    const prepare = () => {
+      document.querySelectorAll('input, textarea').forEach((el) => {
+        const type = (el.type || 'text').toLowerCase();
+        if (el.disabled || el.readOnly || skipTypes.includes(type)) return;
+        el.classList.add('ks-kioskboard-input');
+        const numeric = ${JSON.stringify(config.layout === 'numeric')} || type === 'number' || type === 'tel';
+        el.setAttribute('data-kioskboard-type', numeric ? 'numpad' : 'all');
+        el.setAttribute('data-kioskboard-placement', 'bottom');
+        el.setAttribute('data-kioskboard-specialcharacters', numeric ? 'false' : 'true');
+      });
+    };
+    const run = () => {
+      prepare();
+      if (!window.KioskBoard) (0, eval)(${JSON.stringify(kioskBoardBundle)});
+      if (!window.KioskBoard) return;
+      const signature = ${JSON.stringify(JSON.stringify(config))};
+      if (window.__ksKioskBoardSignature !== signature) {
+        window.KioskBoard.run('.ks-kioskboard-input', {
+          keysArrayOfObjects: ${JSON.stringify(rows)},
+          language: ${JSON.stringify(['fr','de','es'].includes(config.layout) ? config.layout : 'en')},
+          theme: 'light',
+          autoScroll: false,
+          capsLockActive: false,
+          allowRealKeyboard: true,
+          allowMobileKeyboard: false,
+          cssAnimations: true,
+          cssAnimationsDuration: 180,
+          cssAnimationsStyle: 'slide',
+          keysAllowSpacebar: true,
+          keysSpacebarText: 'Space',
+          keysFontFamily: 'Inter, Arial, sans-serif',
+          keysFontSize: ${JSON.stringify(`${config.font || 20}px`)},
+          keysFontWeight: '700',
+          keysIconSize: '24px',
+          keysEnterText: 'Enter',
+          keysEnterCanClose: true
+        });
+        window.__ksKioskBoardSignature = signature;
+      }
+      if (!window.__ksKioskBoardObserver) {
+        window.__ksKioskBoardObserver = new MutationObserver(() => {
+          clearTimeout(window.__ksKioskBoardTimer);
+          window.__ksKioskBoardTimer = setTimeout(run, 150);
+        });
+        window.__ksKioskBoardObserver.observe(document.documentElement, { childList: true, subtree: true });
+      }
+    };
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', run, { once: true });
+    else run();
+  })()`;
+}
+
+async function injectKioskBoardIntoFrames(webContents) {
+  if (!webContents || !webContents.mainFrame || !keyboardConfig.enabled || !kioskBoardBundle) return;
+  const script = getKioskBoardFrameScript();
+  for (const frame of webContents.mainFrame.framesInSubtree) {
+    try { await frame.executeJavaScript(script, true); } catch (_) {}
+  }
+}
 const EDITABLE_CHECK = `(() => {
   const isEditable = (el) => {
     if (!el) return false;
@@ -319,6 +399,9 @@ function createWindow() {
   win.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
     console.error(`[did-fail-load] mainFrame=${isMainFrame} code=${errorCode} url=${validatedURL} ${errorDescription}`);
   });
+  win.webContents.on('did-frame-finish-load', () => {
+    setTimeout(() => injectKioskBoardIntoFrames(win && win.webContents), 250);
+  });
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   win.webContents.on('before-input-event', (event, input) => {
     const key = input.key || '';
@@ -476,6 +559,19 @@ ipcMain.handle('virtual-key-state', async () => {
     value: { hasEditable: !!res, recentClick: res ? res.recentClick : false }
   };
   return virtualKeyStateCache.value;
+});
+
+ipcMain.handle('keyboard-config', async (_event, config = {}) => {
+  keyboardConfig = {
+    enabled: config.enabled !== false,
+    layout: ['en','fr','de','es','numeric'].includes(config.layout) ? config.layout : 'en',
+    width: Number(config.width) || 100,
+    height: Number(config.height) || 56,
+    font: Number(config.font) || 20
+  };
+  virtualKeyStateCache = { time: 0, value: { hasEditable: false, recentClick: false } };
+  setTimeout(() => injectKioskBoardIntoFrames(win && win.webContents), 50);
+  return true;
 });
 
 /** Hard refresh — reload the shell, bypassing the HTTP cache. */

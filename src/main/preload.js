@@ -13,6 +13,9 @@ contextBridge.exposeInMainWorld('kioskElectron', {
   /** Check whether any frame currently has a focused editable field. */
   getVirtualKeyState: () => ipcRenderer.invoke('virtual-key-state'),
 
+  /** Configure KioskBoard injection for loaded pages. */
+  setKeyboardConfig: (config) => ipcRenderer.invoke('keyboard-config', config),
+
   /** Receive window-state changes (fullscreen / kiosk toggled by OS). */
   onWindowState: (cb)       => ipcRenderer.on('window-state', (_, s) => cb(s)),
 

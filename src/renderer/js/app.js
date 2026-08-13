@@ -114,13 +114,14 @@ function applySettings(){
   document.body.style.webkitUserSelect=cfg.disableSelect?'none':'';
   document.getElementById('app').classList.toggle('toolbar-hidden',!!cfg.hideToolbar);
   applyVirtualKeyboardStyle();
+  initKioskBoard();
   resetIdleTimer();
   updateUrlBar(cfg.url||'');
   document.getElementById('status-dot').className=cfg.url?'live':'';
   renderQuickNavBtns();
   // Guard overlay: active whenever domain list is non-empty
   updateGuard();
-  if(!cfg.vkEnabled)hideVirtualKeyboard(true);else syncVirtualKeyboardToFocus();
+  if(!cfg.vkEnabled)hideVirtualKeyboard(true);else initKioskBoard();
 }
 
 /* ═══════════════════════════════════════════════════
@@ -196,6 +197,83 @@ const VK_LAYOUTS={
   }
 };
 
+const KIOSKBOARD_SELECTOR='.ks-kioskboard-input';
+const KIOSKBOARD_SKIP_TYPES=['button','checkbox','color','file','hidden','image','radio','range','reset','submit'];
+let kioskBoardSignature='';
+let kioskBoardObserver=null;
+let kioskBoardRunTimer=null;
+
+function kioskBoardRows(){
+  const layout=VK_LAYOUTS[cfg.vkLayout]||VK_LAYOUTS.en;
+  const skip=new Set(['Shift','Bksp','Enter','Hide','Space','Left','Right']);
+  return (layout.default||VK_LAYOUTS.en.default)
+    .map(row=>row.filter(key=>!skip.has(key)))
+    .filter(row=>row.length)
+    .map(row=>Object.fromEntries(row.map((key,i)=>[String(i),key])));
+}
+
+function prepareKioskBoardTargets(root=document){
+  const fields=root.querySelectorAll?.('input, textarea')||[];
+  fields.forEach(el=>{
+    const type=(el.type||'text').toLowerCase();
+    const allowed=!el.disabled&&!el.readOnly&&!KIOSKBOARD_SKIP_TYPES.includes(type);
+    el.classList.toggle(KIOSKBOARD_SELECTOR.slice(1),!!cfg.vkEnabled&&allowed);
+    if(!allowed)return;
+    const numeric=cfg.vkLayout==='numeric'||type==='number'||type==='tel';
+    el.setAttribute('data-kioskboard-type',numeric?'numpad':'all');
+    el.setAttribute('data-kioskboard-placement','bottom');
+    el.setAttribute('data-kioskboard-specialcharacters',numeric?'false':'true');
+  });
+}
+
+function kioskBoardOptions(){
+  return {
+    keysArrayOfObjects:kioskBoardRows(),
+    language:['fr','de','es'].includes(cfg.vkLayout)?cfg.vkLayout:'en',
+    theme:'light',
+    autoScroll:false,
+    capsLockActive:false,
+    allowRealKeyboard:true,
+    allowMobileKeyboard:false,
+    cssAnimations:true,
+    cssAnimationsDuration:180,
+    cssAnimationsStyle:'slide',
+    keysAllowSpacebar:true,
+    keysSpacebarText:'Space',
+    keysFontFamily:'Inter, Arial, sans-serif',
+    keysFontSize:`${cfg.vkFont||20}px`,
+    keysFontWeight:'700',
+    keysIconSize:'24px',
+    keysEnterText:'Enter',
+    keysEnterCanClose:true
+  };
+}
+
+function applyKioskBoardStyle(){
+  let style=document.getElementById('kioskboard-dynamic-style');
+  if(!style){style=document.createElement('style');style.id='kioskboard-dynamic-style';document.head.appendChild(style)}
+  style.textContent=`.kioskboard-wrapper{z-index:950!important}.kioskboard-wrapper .kioskboard-row{max-width:${cfg.vkWidth||100}vw!important}.kioskboard-wrapper button{min-height:${cfg.vkHeight||56}px!important;font-size:${cfg.vkFont||20}px!important;font-family:Inter,Arial,sans-serif!important;font-weight:700!important}.kioskboard-wrapper.kioskboard-theme-light{background:rgba(255,255,255,.98)!important;border-top:1px solid var(--border)!important;box-shadow:0 -10px 40px rgba(0,0,0,.16)!important}`;
+}
+
+function initKioskBoard(){
+  if(!cfg.vkEnabled||!window.KioskBoard)return;
+  prepareKioskBoardTargets(document);
+  applyKioskBoardStyle();
+  const signature=`${cfg.vkLayout}|${cfg.vkWidth}|${cfg.vkHeight}|${cfg.vkFont}|${cfg.vkEnabled}`;
+  if(kioskBoardSignature!==signature){
+    window.KioskBoard.run(KIOSKBOARD_SELECTOR,kioskBoardOptions());
+    kioskBoardSignature=signature;
+  }
+  if(!kioskBoardObserver){
+    kioskBoardObserver=new MutationObserver(()=>{
+      clearTimeout(kioskBoardRunTimer);
+      kioskBoardRunTimer=setTimeout(()=>{prepareKioskBoardTargets(document);window.KioskBoard?.run(KIOSKBOARD_SELECTOR,kioskBoardOptions())},150);
+    });
+    kioskBoardObserver.observe(document.body,{childList:true,subtree:true});
+  }
+  window.kioskElectron?.setKeyboardConfig?.({enabled:!!cfg.vkEnabled,layout:cfg.vkLayout||'en',width:cfg.vkWidth||100,height:cfg.vkHeight||56,font:cfg.vkFont||20});
+}
+
 function renderVirtualKeyboardSettings(){
   const width=document.getElementById('cfg-vk-width');
   const height=document.getElementById('cfg-vk-height');
@@ -263,6 +341,7 @@ function renderVirtualKeyboard(force=false){
 }
 
 function applyVirtualKeyboardStyle(){
+  applyKioskBoardStyle();
   const vk=document.getElementById('vk-overlay');
   if(!vk)return;
   vk.classList.toggle('floating',cfg.vkMode==='floating');
@@ -486,6 +565,8 @@ function sendVirtualKeyboardInput(payload){
 
 function showVirtualKeyboard(reason='show'){
   vkLastReason=reason;
+  initKioskBoard();
+  return;
   if(!cfg.vkEnabled){return;}
   cancelVirtualKeyboardProbe();
   const vk=document.getElementById('vk-overlay');
@@ -529,49 +610,16 @@ function hideVirtualKeyboard(immediate=false,reason='hide'){
 }
 
 function toggleManualVirtualKeyboard(){
-  if(vkForcedOpen||isVirtualKeyboardVisible()){
-    vkForcedOpen=false;
-    hideVirtualKeyboard(false,'manual-toggle');
-    return;
-  }
-  vkForcedOpen=true;
-  resetVirtualKeyboardManualHide();
-  markVirtualKeyboardPointerIntent();
-  clearTimeout(vkHideTimer);
-  vkKeepVisibleUntil=Date.now()+5000;
-  showVirtualKeyboard('manual-trigger');
+  initKioskBoard();
+  showToast('Tap a text field to open keyboard','ok');
 }
 
 function syncVirtualKeyboardToFocus(){
-  if(!cfg.vkEnabled){hideVirtualKeyboard(true,'disabled');return;}
-  if(vkForcedOpen){showVirtualKeyboard('forced-open');return;}
-  if(!cfg.vkAutoShow){hideVirtualKeyboard(true,'autoshow-off');return;}
-  if(vkManualHidden){hideVirtualKeyboard(true,'manual-latched');return;}
-  const target=getVirtualKeyboardTarget();
-  if(target&&hasRecentVirtualKeyboardPointerIntent())showVirtualKeyboard('sync-focus');
-  else hideVirtualKeyboard(true,'sync-hide');
+  if(cfg.vkEnabled)initKioskBoard();
 }
 
 function queueVirtualKeyboardHide(){
   clearTimeout(vkHideTimer);
-  vkHideTimer=setTimeout(()=>{
-    if(vkForcedOpen){
-      showVirtualKeyboard('forced-open');
-      return;
-    }
-    if(vkManualHidden){
-      vkFrameFocused=false;
-      hideVirtualKeyboard(false,'manual-latched');
-      return;
-    }
-    const target=getVirtualKeyboardTarget();
-    if(target&&(vkForcedOpen||hasRecentVirtualKeyboardPointerIntent())){
-      showVirtualKeyboard('hide-cancelled');
-      return;
-    }
-    vkFrameFocused=false;
-    hideVirtualKeyboard(false,'queued-hide');
-  },120);
 }
 
 function typeIntoField(el,text){
