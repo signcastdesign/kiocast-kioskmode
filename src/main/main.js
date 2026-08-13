@@ -138,10 +138,17 @@ public static class Win32 {
   `);
 }
 
+function getKioskBounds() {
+  const display = screen.getPrimaryDisplay();
+  return display.bounds || { x: 0, y: 0, width: display.size.width, height: display.size.height };
+}
+
 function enforceKioskWindow() {
   if (!win || win.isDestroyed() || allowAppExit) return;
+  const bounds = getKioskBounds();
   try { win.setSkipTaskbar(true); } catch (_) {}
   try { win.setAlwaysOnTop(true, 'screen-saver'); } catch (_) {}
+  try { win.setBounds(bounds, false); } catch (_) {}
   try { if (!win.isFullScreen()) win.setFullScreen(true); } catch (_) {}
   try { if (!win.isKiosk()) win.setKiosk(true); } catch (_) {}
   try { if (win.isMinimized()) win.restore(); } catch (_) {}
@@ -166,9 +173,10 @@ function stopKioskGuard() {
 }
 
 function createWindow() {
-  const { width, height } = screen.getPrimaryDisplay().workAreaSize;
+  const { x, y, width, height } = getKioskBounds();
 
   win = new BrowserWindow({
+    x, y,
     width, height,
     frame:           false,
     kiosk:           true,
@@ -197,6 +205,7 @@ function createWindow() {
   win.setMenuBarVisibility(false);
   win.setSkipTaskbar(true);
   win.setAlwaysOnTop(true, 'screen-saver');
+  win.setBounds(getKioskBounds(), false);
   win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   win.setFullScreen(true);
   win.setKiosk(true);
