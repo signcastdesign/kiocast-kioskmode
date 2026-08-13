@@ -754,12 +754,14 @@ function removeDomain(i){cfg.domains.splice(i,1);renderDomainList()}
    QUICK-NAV BUTTONS
 ═══════════════════════════════════════════════════ */
 function addQNav(){
-  const emoji=document.getElementById('qn-emoji').value.trim()||'&#127760;';
+  const iconInput=document.getElementById('qn-icon-url');
+  const iconUrl=normalizeIconUrl(iconInput?.value||'');
   const label=document.getElementById('qn-label').value.trim();
   const url=document.getElementById('qn-url').value.trim();
   if(!label||!url){showToast('Label and URL required','error');return}
-  cfg.quickNavBtns.push({id:Date.now(),label,url,emoji});
-  document.getElementById('qn-emoji').value='';
+  if((iconInput?.value||'').trim()&&!iconUrl){showToast('Custom icon must be a valid URL','error');return}
+  cfg.quickNavBtns.push({id:Date.now(),label,url,iconUrl});
+  if(iconInput)iconInput.value='';
   document.getElementById('qn-label').value='';
   document.getElementById('qn-url').value='';
   renderQNavList();
@@ -775,7 +777,7 @@ function renderQNavList(){
     row.className='qnav-item';
     row.draggable=true;
     row.dataset.i=i;
-    row.innerHTML=`<span class="qnav-drag-handle" title="Drag to reorder">&#8597;</span><span class="qnav-item-emoji">${btn.emoji}</span><span class="qnav-item-label">${escH(btn.label)}</span><span class="qnav-item-url">${escH(btn.url)}</span><button onclick="removeQNav(${btn.id})" title="Remove">&#x2715;</button>`;
+    row.innerHTML=`<span class="qnav-drag-handle" title="Drag to reorder">&#8597;</span><span class="qnav-item-emoji">${quickNavIconMarkup(btn)}</span><span class="qnav-item-label">${escH(btn.label)}</span><span class="qnav-item-url">${escH(btn.url)}</span><button onclick="removeQNav(${btn.id})" title="Remove">&#x2715;</button>`;
     row.addEventListener('dragstart',e=>{e.dataTransfer.setData('text/plain',i);row.classList.add('dragging')});
     row.addEventListener('dragend',()=>row.classList.remove('dragging'));
     row.addEventListener('dragover',e=>{e.preventDefault();row.classList.add('drag-over')});
@@ -803,7 +805,7 @@ function renderQuickNavBtns(){
     const b=document.createElement('button');
     b.className='qnav-btn';
     b.title=btn.url;
-    b.innerHTML=`<span class="qn-icon">${btn.emoji}</span>${escH(btn.label)}`;
+    b.innerHTML=`<span class="qn-icon">${quickNavIconMarkup(btn)}</span>${escH(btn.label)}`;
     b.addEventListener('click',()=>{
       const d=extractDomain(btn.url);
       if(!isDomainAllowed(d)){showBlockScreen(d);log('block','Quick-nav blocked: '+btn.url);return}
@@ -829,7 +831,23 @@ function renderQuickNavBtns(){
   });
 }
 
+function faviconUrlFor(url){
+  try{const host=new URL(normalizeUrl(url)).hostname;return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(host)}&sz=64`}catch(e){return ''}
+}
+function normalizeIconUrl(value){
+  const v=String(value||'').trim();
+  if(!v)return '';
+  if(/^data:image\//i.test(v))return v;
+  try{return normalizeUrl(v)}catch(e){return ''}
+}
+function quickNavIconUrl(btn){return normalizeIconUrl(btn.iconUrl)||faviconUrlFor(btn.url)}
+function quickNavIconMarkup(btn){
+  const src=quickNavIconUrl(btn);
+  if(src)return `<img src="${escA(src)}" alt="" onerror="this.parentElement.textContent='🌐'">`;
+  return escH(btn.emoji||'🌐');
+}
 function escH(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+function escA(s){return escH(s).replace(/"/g,'&quot;').replace(/'/g,'&#39;')}
 
 /* ═══════════════════════════════════════════════════
    NAVIGATION & DOMAIN GUARD
