@@ -152,7 +152,11 @@ function openSettings(){
   renderDomainList();renderQNavList();renderVirtualKeyboardSettings();refreshUpdateState();switchTab(0);
   document.getElementById('settings-overlay').classList.add('open');
 }
-function closeSettings(){document.getElementById('settings-overlay').classList.remove('open');syncVirtualKeyboardToFocus()}
+function closeSettings(){
+  document.getElementById('settings-overlay').classList.remove('open');
+  kioskBoardSignature='';
+  setTimeout(()=>{if(cfg.vkEnabled)initKioskBoard();},100);
+}
 function saveSettings(){
   const newUrl=document.getElementById('cfg-url').value.trim();
   cfg.disableRightClick=document.getElementById('tog-rightclick').checked;
@@ -373,6 +377,10 @@ function kioskBoardRows(){
 function prepareKioskBoardTargets(root=document){
   const fields=root.querySelectorAll?.('input, textarea')||[];
   fields.forEach(el=>{
+    if(el.closest('#settings-overlay')||el.closest('#pin-overlay')||el.closest('#exit-confirm')){
+      el.classList.remove(KIOSKBOARD_SELECTOR.slice(1));
+      return;
+    }
     const type=(el.type||'text').toLowerCase();
     const allowed=!el.disabled&&!el.readOnly&&!KIOSKBOARD_SKIP_TYPES.includes(type);
     el.classList.toggle(KIOSKBOARD_SELECTOR.slice(1),!!cfg.vkEnabled&&allowed);
@@ -424,8 +432,12 @@ function initKioskBoard(){
   }
   if(!kioskBoardObserver){
     kioskBoardObserver=new MutationObserver(()=>{
+      if(document.getElementById('settings-overlay')?.classList.contains('open'))return;
       clearTimeout(kioskBoardRunTimer);
-      kioskBoardRunTimer=setTimeout(()=>{prepareKioskBoardTargets(document);window.KioskBoard?.run(KIOSKBOARD_SELECTOR,kioskBoardOptions())},150);
+      kioskBoardRunTimer=setTimeout(()=>{
+        prepareKioskBoardTargets(document);
+        window.KioskBoard?.run(KIOSKBOARD_SELECTOR,kioskBoardOptions());
+      },300);
     });
     kioskBoardObserver.observe(document.body,{childList:true,subtree:true});
   }
@@ -602,7 +614,7 @@ function applyVirtualKeyboardStyle(){
 
 function isVirtualKeyboardInput(el){
   if(!el||!el.isConnected)return false;
-  if(el.closest('#vk-overlay')||el.closest('#pin-overlay'))return false;
+  if(el.closest('#vk-overlay')||el.closest('#pin-overlay')||el.closest('#settings-overlay')||el.closest('#exit-confirm'))return false;
   if(el.matches('textarea'))return !el.readOnly&&!el.disabled;
   if(el.matches('input')){
     const type=(el.type||'text').toLowerCase();
@@ -798,22 +810,6 @@ function sendVirtualKeyboardInput(payload){
 
 function showVirtualKeyboard(reason='show'){
   vkLastReason=reason;
-  initKioskBoard();
-  return;
-  if(!cfg.vkEnabled){return;}
-  cancelVirtualKeyboardProbe();
-  const vk=document.getElementById('vk-overlay');
-  if(!vk){return;}
-  renderVirtualKeyboard();
-  applyVirtualKeyboardStyle();
-  vk.style.display='flex';
-  vk.setAttribute('aria-hidden','false');
-  requestAnimationFrame(()=>{
-    vk.classList.add('visible');
-    if(cfg.vkMode!=='floating')vk.style.transform='translate(-50%,0)';
-    updateVirtualKeyboardTriggerButton();
-    
-  });
 }
 
 function hideVirtualKeyboard(immediate=false,reason='hide'){
