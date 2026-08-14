@@ -1,6 +1,6 @@
 {
   "name": "kioskshell",
-  "version": "1.1.15",
+  "version": "1.1.16",
   "description": "KIOCAST KioskShell - secure touch kiosk browser",
   "author": "SignCast Design",
   "main": "src/main/main.js",

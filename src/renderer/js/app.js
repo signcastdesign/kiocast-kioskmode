@@ -473,32 +473,29 @@ function renderVirtualKeyboardSettings(){
   if(hVal)hVal.textContent=`${height.value}px`;
   if(fVal)fVal.textContent=`${font.value}px`;
 
+  const _syncKbIpc=()=>window.kioskElectron?.setKeyboardConfig?.({enabled:!!cfg.vkEnabled,layout:cfg.vkLayout||'en',width:cfg.vkWidth,height:cfg.vkHeight,font:cfg.vkFont});
   width.oninput=()=>{
     if(wVal)wVal.textContent=`${width.value}%`;
     cfg.vkWidth=parseInt(width.value)||100;
-    kioskBoardSignature='';
     applyKioskBoardStyle();
-    applyVirtualKeyboardStyle();
-    window.kioskElectron?.setKeyboardConfig?.({enabled:!!cfg.vkEnabled,layout:cfg.vkLayout||'en',width:cfg.vkWidth,height:cfg.vkHeight,font:cfg.vkFont});
+    _syncKbIpc();
   };
   height.oninput=()=>{
     if(hVal)hVal.textContent=`${height.value}px`;
     cfg.vkHeight=parseInt(height.value)||56;
-    kioskBoardSignature='';
     applyKioskBoardStyle();
-    window.kioskElectron?.setKeyboardConfig?.({enabled:!!cfg.vkEnabled,layout:cfg.vkLayout||'en',width:cfg.vkWidth,height:cfg.vkHeight,font:cfg.vkFont});
+    _syncKbIpc();
   };
   font.oninput=()=>{
     if(fVal)fVal.textContent=`${font.value}px`;
     cfg.vkFont=parseInt(font.value)||20;
-    kioskBoardSignature='';
     applyKioskBoardStyle();
-    window.kioskElectron?.setKeyboardConfig?.({enabled:!!cfg.vkEnabled,layout:cfg.vkLayout||'en',width:cfg.vkWidth,height:cfg.vkHeight,font:cfg.vkFont});
+    _syncKbIpc();
   };
-  if(modeEl)modeEl.onchange=()=>{cfg.vkMode=modeEl.value;_vkLiveApply()};
-  if(layoutEl)layoutEl.onchange=()=>{cfg.vkLayout=layoutEl.value;kioskBoardSignature='';_vkLiveApply()};
-  if(enabledEl)enabledEl.onchange=()=>_vkLiveApply();
-  if(autoshowEl)autoshowEl.onchange=()=>{cfg.vkAutoShow=autoshowEl.checked};
+  if(modeEl)modeEl.onchange=()=>{cfg.vkMode=modeEl.value;applyVirtualKeyboardStyle();};
+  if(layoutEl)layoutEl.onchange=()=>{cfg.vkLayout=layoutEl.value;kioskBoardSignature='';initKioskBoard();};
+  if(enabledEl)enabledEl.onchange=()=>{cfg.vkEnabled=enabledEl.checked;kioskBoardSignature='';if(cfg.vkEnabled)initKioskBoard();else hideVirtualKeyboard(true);};
+  if(autoshowEl)autoshowEl.onchange=()=>{cfg.vkAutoShow=autoshowEl.checked;};
 }
 
 function resetVkDefaults(){
