@@ -466,16 +466,23 @@ ipcMain.on('virtual-key', async (_ev, payload = {}) => {
   if (!win) return;
   const wc = win.webContents;
   if (!wc || !wc.mainFrame) return;
+
+  const ALLOWED_TYPES = new Set(['text', 'backspace', 'left', 'right', 'enter']);
+  if (!payload || typeof payload !== 'object') return;
+  if (!ALLOWED_TYPES.has(payload.type)) return;
+
+  const MAX_TEXT_LEN = 512;
+  let text = typeof payload.text === 'string' ? payload.text.slice(0, MAX_TEXT_LEN) : '';
+  if (payload.type === 'text' && !text) return;
+
   const res = await findActiveEditableFrame(wc);
   if (!res) return;
   const activeFrame = res.frame;
 
-  const text = typeof payload.text === 'string' ? payload.text : '';
   const textLiteral = JSON.stringify(text);
   let action = '';
   switch (payload.type) {
     case 'text':
-      if (!text) return;
       action = `
         if (el.matches?.('input,textarea')) {
           const start = el.selectionStart ?? el.value.length;
@@ -565,12 +572,14 @@ ipcMain.handle('virtual-key-state', async () => {
 });
 
 ipcMain.handle('keyboard-config', async (_event, config = {}) => {
+  if (!config || typeof config !== 'object') return false;
+  const ALLOWED_LAYOUTS = new Set(['en', 'fr', 'de', 'es', 'numeric']);
   keyboardConfig = {
     enabled: config.enabled !== false,
-    layout: ['en','fr','de','es','numeric'].includes(config.layout) ? config.layout : 'en',
-    width: Number(config.width) || 100,
-    height: Number(config.height) || 56,
-    font: Number(config.font) || 20
+    layout: ALLOWED_LAYOUTS.has(config.layout) ? config.layout : 'en',
+    width:  Math.max(20, Math.min(100, Math.round(Number(config.width)  || 100))),
+    height: Math.max(32, Math.min(120, Math.round(Number(config.height) || 56))),
+    font:   Math.max(10, Math.min(40,  Math.round(Number(config.font)   || 20))),
   };
   virtualKeyStateCache = { time: 0, value: { hasEditable: false, recentClick: false } };
   setTimeout(() => injectKioskBoardIntoFrames(win && win.webContents), 50);

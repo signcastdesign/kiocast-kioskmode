@@ -231,6 +231,17 @@
     <!-- Tab 3: Security -->
     <div class="sp-pane" id="tab-3">
       <div class="sp-section">
+        <div class="sp-label">Admin PIN Lock</div>
+        <div class="sp-help">Protect settings with a 4-digit PIN. Leave new PIN blank to remove the lock.</div>
+        <div id="pin-lockout-banner" style="display:none;padding:10px 14px;background:var(--red-glow);border:1px solid var(--red);border-radius:8px;color:var(--red);font-family:var(--font-mono);font-size:12px;margin-bottom:12px">Too many wrong attempts — try again in <span id="pin-lockout-countdown">30</span>s</div>
+        <div class="sp-row"><input class="sp-input" id="cfg-pin" type="password" placeholder="Current PIN (blank if none)" maxlength="4" inputmode="numeric"></div>
+        <div class="sp-row">
+          <input class="sp-input" id="cfg-pin-new" type="password" placeholder="New PIN (4 digits)" maxlength="4" inputmode="numeric">
+          <input class="sp-input" id="cfg-pin-confirm" type="password" placeholder="Confirm new PIN" maxlength="4" inputmode="numeric">
+        </div>
+        <button class="sp-btn" onclick="savePIN()" style="width:100%">UPDATE PIN</button>
+      </div>
+      <div class="sp-section">
         <div class="sp-label">Browser Controls</div>
         <div class="toggle-row">
           <div><div class="toggle-label">Disable Right-Click</div><div class="toggle-desc">Block context menu on shell page</div></div>
@@ -275,18 +286,8 @@
       </div>
     </div>
 
-    <!-- Tab 5: Admin -->
+    <!-- Tab 5: System -->
     <div class="sp-pane" id="tab-5">
-      <div class="sp-section">
-        <div class="sp-label">Admin PIN Lock</div>
-        <div class="sp-help">Set a 4-digit PIN to protect settings. Leave new PIN blank to remove lock.</div>
-        <div class="sp-row"><input class="sp-input" id="cfg-pin" type="password" placeholder="Current PIN (blank if none)" maxlength="4"></div>
-        <div class="sp-row">
-          <input class="sp-input" id="cfg-pin-new" type="password" placeholder="New PIN (4 digits)" maxlength="4">
-          <input class="sp-input" id="cfg-pin-confirm" type="password" placeholder="Confirm new PIN" maxlength="4">
-        </div>
-        <button class="sp-btn" onclick="savePIN()" style="width:100%">UPDATE PIN</button>
-      </div>
       <div class="sp-section">
         <div class="sp-label">Virtual Keyboard</div>
         <div class="toggle-row">

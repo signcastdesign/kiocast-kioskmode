@@ -16,7 +16,6 @@ let activityLog=[];
 let pinBuffer='', pinPurpose='';
 let idleTimer=null, ict=null;
 let navHistory=[], navIndex=-1;
-// Whether the guard overlay is enabled
 let guardActive=false;
 let adminTapCount=0;
 let adminTapLastTouch=0;
@@ -39,14 +38,73 @@ let vkStateCheckPending=false;
 let vkIframeProbeUntil=0;
 let exitInProgress=false;
 let activeConfirmResolve=null;
+let pinFailCount=0;
+let pinLockedUntil=0;
+let pinLockoutTimer=null;
 
 
 /* ═══════════════════════════════════════════════════
    PERSISTENCE
 ═══════════════════════════════════════════════════ */
-function loadCfg(){try{const s=localStorage.getItem('ks_cfg');if(s)cfg={...cfg,...JSON.parse(s)};cfg.domains=dedupeDomains(cfg.domains||[])}catch(e){}try{const l=localStorage.getItem('ks_log');if(l)activityLog=JSON.parse(l)}catch(e){}}
-function saveCfg(){try{localStorage.setItem('ks_cfg',JSON.stringify(cfg))}catch(e){}}
+function loadCfg(){
+  try{const s=localStorage.getItem('ks_cfg');if(s){const parsed=JSON.parse(s);delete parsed.pin;cfg={...cfg,...parsed}}cfg.domains=dedupeDomains(cfg.domains||[])}catch(e){}
+  try{const l=localStorage.getItem('ks_log');if(l)activityLog=JSON.parse(l)}catch(e){}
+}
+function saveCfg(){
+  try{
+    const toStore={...cfg};
+    delete toStore.pin;
+    localStorage.setItem('ks_cfg',JSON.stringify(toStore));
+  }catch(e){}
+}
 function saveLog(){try{localStorage.setItem('ks_log',JSON.stringify(activityLog))}catch(e){}}
+
+/* ═══════════════════════════════════════════════════
+   PIN SECURITY — SHA-256 + separate storage + lockout
+═══════════════════════════════════════════════════ */
+async function hashPin(pin){
+  if(!pin)return '';
+  const buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode('ks_pin_v1:'+pin));
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+function loadPinHash(){return localStorage.getItem('ks_pin_hash')||''}
+function savePinHash(hash){
+  if(hash)localStorage.setItem('ks_pin_hash',hash);
+  else localStorage.removeItem('ks_pin_hash');
+}
+function isPinActive(){return !!loadPinHash()}
+function isPinLocked(){return Date.now()<pinLockedUntil}
+function pinLockSecondsLeft(){return Math.ceil((pinLockedUntil-Date.now())/1000)}
+
+function startPinLockout(){
+  pinLockedUntil=Date.now()+30000;
+  pinFailCount=0;
+  updateLockoutBanner();
+  clearInterval(pinLockoutTimer);
+  pinLockoutTimer=setInterval(()=>{
+    const left=pinLockSecondsLeft();
+    const el=document.getElementById('pin-lockout-countdown');
+    if(el)el.textContent=left;
+    if(left<=0){
+      clearInterval(pinLockoutTimer);
+      pinLockoutTimer=null;
+      updateLockoutBanner();
+    }
+  },1000);
+}
+
+function updateLockoutBanner(){
+  const banner=document.getElementById('pin-lockout-banner');
+  if(!banner)return;
+  banner.style.display=isPinLocked()?'block':'none';
+}
+
+function migrateLegacyPin(){
+  if(cfg.pin&&!loadPinHash()){
+    hashPin(cfg.pin).then(h=>{savePinHash(h);cfg.pin='';});
+  }
+  cfg.pin='';
+}
 
 /* ═══════════════════════════════════════════════════
    ACTIVITY LOG
@@ -58,9 +116,20 @@ function clearActivity(){activityLog=[];saveLog();renderLog();showToast('Log cle
 /* ═══════════════════════════════════════════════════
    SETTINGS TABS
 ═══════════════════════════════════════════════════ */
+const TAB_COUNT=7;
 let activeTab=0;
-function switchTab(i){activeTab=i;document.querySelectorAll('.sp-tab').forEach((t,ti)=>t.classList.toggle('active',ti===i));document.querySelectorAll('.sp-pane').forEach((p,pi)=>p.classList.toggle('active',pi===i));if(i===5)renderLog();if(i===1)renderQNavList();if(i===3)renderDomainList();if(i===4)renderVirtualKeyboardSettings()}
-function tryOpenSettings(){if(cfg.pin)showPIN('settings');else openSettings()}
+function switchTab(i){
+  i=Math.max(0,Math.min(TAB_COUNT-1,parseInt(i)||0));
+  activeTab=i;
+  document.querySelectorAll('.sp-tab').forEach((t,ti)=>t.classList.toggle('active',ti===i));
+  document.querySelectorAll('.sp-pane').forEach((p,pi)=>p.classList.toggle('active',pi===i));
+  if(i===6)renderLog();
+  if(i===2)renderQNavList();
+  if(i===4)renderDomainList();
+  if(i===5)renderVirtualKeyboardSettings();
+  if(i===3)updateLockoutBanner();
+}
+function tryOpenSettings(){if(isPinActive())showPIN('settings');else openSettings()}
 function openSettings(){
   document.getElementById('cfg-url').value=cfg.url;
   document.getElementById('cfg-idle').value=cfg.idleTimeout||0;
@@ -160,12 +229,87 @@ function guardClick(e){
 /* ═══════════════════════════════════════════════════
    PIN
 ═══════════════════════════════════════════════════ */
-function showPIN(purpose){hideVirtualKeyboard(true);pinPurpose=purpose;pinBuffer='';renderPinDots();document.getElementById('pin-hint').textContent='Enter 4-digit PIN';document.getElementById('pin-cancel-btn').style.display=purpose==='idle'?'none':'';document.getElementById('pin-overlay').classList.add('show')}
+function showPIN(purpose){
+  hideVirtualKeyboard(true);
+  pinPurpose=purpose;
+  pinBuffer='';
+  renderPinDots();
+  const locked=isPinLocked();
+  document.getElementById('pin-hint').textContent=locked?'Too many attempts — locked':'Enter 4-digit PIN';
+  document.getElementById('pin-cancel-btn').style.display=purpose==='idle'?'none':'';
+  document.getElementById('pin-overlay').classList.add('show');
+}
 function pinCancel(){document.getElementById('pin-overlay').classList.remove('show');syncVirtualKeyboardToFocus()}
-function pinKey(k){if(k==='clear')pinBuffer='';else if(k==='back')pinBuffer=pinBuffer.slice(0,-1);else if(pinBuffer.length<4)pinBuffer+=k;renderPinDots();if(pinBuffer.length===4)setTimeout(checkPin,100)}
+function pinKey(k){
+  if(isPinLocked()){
+    document.getElementById('pin-hint').textContent=`Locked — wait ${pinLockSecondsLeft()}s`;
+    return;
+  }
+  if(k==='clear')pinBuffer='';
+  else if(k==='back')pinBuffer=pinBuffer.slice(0,-1);
+  else if(pinBuffer.length<4)pinBuffer+=k;
+  renderPinDots();
+  if(pinBuffer.length===4)setTimeout(checkPin,100);
+}
 function renderPinDots(err){for(let i=0;i<4;i++){const d=document.getElementById('pd'+i);d.className='pin-dot'+(i<pinBuffer.length?' filled':'')+(err?' error':'')}}
-function checkPin(){if(pinBuffer===cfg.pin){document.getElementById('pin-overlay').classList.remove('show');if(pinPurpose==='settings')openSettings();if(pinPurpose==='idle')wakeFromIdle();pinBuffer=''}else{renderPinDots(true);document.getElementById('pin-hint').textContent='Incorrect PIN';setTimeout(()=>{pinBuffer='';renderPinDots();document.getElementById('pin-hint').textContent='Enter 4-digit PIN'},800);log('block','Wrong PIN')}}
-function savePIN(){const cur=document.getElementById('cfg-pin').value,nw=document.getElementById('cfg-pin-new').value,cf=document.getElementById('cfg-pin-confirm').value;if(cfg.pin&&cur!==cfg.pin){showToast('Current PIN incorrect','error');return}if(nw&&nw.length!==4){showToast('PIN must be 4 digits','error');return}if(nw!==cf){showToast('PINs do not match','error');return}cfg.pin=nw;saveCfg();showToast(nw?'PIN updated':'PIN removed','ok');log('info',nw?'PIN updated':'PIN removed')}
+async function checkPin(){
+  if(isPinLocked()){
+    renderPinDots(true);
+    document.getElementById('pin-hint').textContent=`Locked — wait ${pinLockSecondsLeft()}s`;
+    pinBuffer='';
+    renderPinDots();
+    return;
+  }
+  const entered=pinBuffer;
+  pinBuffer='';
+  const stored=loadPinHash();
+  const enteredHash=await hashPin(entered);
+  if(stored&&enteredHash===stored){
+    pinFailCount=0;
+    document.getElementById('pin-overlay').classList.remove('show');
+    if(pinPurpose==='settings')openSettings();
+    if(pinPurpose==='idle')wakeFromIdle();
+  }else{
+    pinFailCount++;
+    renderPinDots(true);
+    log('block','Wrong PIN (attempt '+pinFailCount+')');
+    if(pinFailCount>=5){
+      startPinLockout();
+      document.getElementById('pin-hint').textContent='Too many attempts — locked 30s';
+    }else{
+      const remaining=5-pinFailCount;
+      document.getElementById('pin-hint').textContent=`Incorrect PIN (${remaining} attempt${remaining===1?'':'s'} left)`;
+    }
+    setTimeout(()=>{renderPinDots();if(!isPinLocked())document.getElementById('pin-hint').textContent='Enter 4-digit PIN'},900);
+  }
+}
+async function savePIN(){
+  const curVal=document.getElementById('cfg-pin').value;
+  const nwVal=document.getElementById('cfg-pin-new').value;
+  const cfVal=document.getElementById('cfg-pin-confirm').value;
+  const stored=loadPinHash();
+  if(stored){
+    if(!curVal){showToast('Enter current PIN','error');return}
+    const curHash=await hashPin(curVal);
+    if(curHash!==stored){showToast('Current PIN incorrect','error');return}
+  }
+  if(nwVal&&nwVal.length!==4){showToast('PIN must be 4 digits','error');return}
+  if(nwVal&&!/^\d{4}$/.test(nwVal)){showToast('PIN must be 4 digits (0–9)','error');return}
+  if(nwVal!==cfVal){showToast('PINs do not match','error');return}
+  if(nwVal){
+    const newHash=await hashPin(nwVal);
+    savePinHash(newHash);
+    showToast('PIN updated','ok');
+    log('info','PIN updated');
+  }else{
+    savePinHash('');
+    showToast('PIN removed','ok');
+    log('info','PIN removed');
+  }
+  document.getElementById('cfg-pin').value='';
+  document.getElementById('cfg-pin-new').value='';
+  document.getElementById('cfg-pin-confirm').value='';
+}
 
 /* ═══════════════════════════════════════════════════
    HIDDEN ADMIN GESTURE
@@ -1225,7 +1369,7 @@ function showIdle(){
   document.getElementById('idle-date').textContent=new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'}).toUpperCase();
   document.getElementById('idle-screen').classList.add('show');
   clearInterval(ict);ict=setInterval(()=>{document.getElementById('idle-clock').textContent=new Date().toTimeString().slice(0,8);document.getElementById('idle-date').textContent=new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'}).toUpperCase()},1000);
-  document.getElementById('idle-screen').onclick=()=>{if(cfg.pin)showPIN('idle');else wakeFromIdle()};
+  document.getElementById('idle-screen').onclick=()=>{if(isPinActive())showPIN('idle');else wakeFromIdle()};
   log('info','Screensaver on');
 }
 function wakeFromIdle(){clearInterval(ict);document.getElementById('idle-screen').classList.remove('show');resetIdleTimer()}
@@ -1444,7 +1588,7 @@ if(!window.kioskElectron&&'serviceWorker'in navigator)navigator.serviceWorker.re
 /* ═══════════════════════════════════════════════════
    INIT
 ═══════════════════════════════════════════════════ */
-loadCfg();applySettings();updateNavButtons();
+loadCfg();migrateLegacyPin();applySettings();updateNavButtons();
 if(window.kioskElectron?.onUpdateState)window.kioskElectron.onUpdateState(renderUpdateState);
 refreshUpdateState();
 if(window.kioskElectron?.getAutoStart){
