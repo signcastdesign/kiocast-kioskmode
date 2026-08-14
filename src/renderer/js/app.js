@@ -126,7 +126,7 @@ function switchTab(i){
   if(i===6)renderLog();
   if(i===2)renderQNavList();
   if(i===4)renderDomainList();
-  if(i===5)renderVirtualKeyboardSettings();
+  if(i===1)renderVirtualKeyboardSettings();
   if(i===3)updateLockoutBanner();
 }
 function tryOpenSettings(){if(isPinActive())showPIN('settings');else openSettings()}
@@ -436,20 +436,40 @@ function initKioskBoard(){
   window.kioskElectron?.setKeyboardConfig?.({enabled:!!cfg.vkEnabled,layout:cfg.vkLayout||'en',width:cfg.vkWidth||100,height:cfg.vkHeight||56,font:cfg.vkFont||20});
 }
 
+const VK_DEFAULTS={vkEnabled:true,vkAutoShow:true,vkMode:'fixed',vkLayout:'en',vkWidth:100,vkHeight:56,vkFont:20};
+
 function renderVirtualKeyboardSettings(){
   const width=document.getElementById('cfg-vk-width');
   const height=document.getElementById('cfg-vk-height');
   const font=document.getElementById('cfg-vk-font');
   if(!width||!height||!font)return;
-  width.value=cfg.vkWidth||100;
-  height.value=cfg.vkHeight||56;
-  font.value=cfg.vkFont||20;
-  document.getElementById('cfg-vk-width-val').textContent=`${width.value}%`;
-  document.getElementById('cfg-vk-height-val').textContent=`${height.value}px`;
-  document.getElementById('cfg-vk-font-val').textContent=`${font.value}px`;
-  width.oninput=()=>document.getElementById('cfg-vk-width-val').textContent=`${width.value}%`;
-  height.oninput=()=>document.getElementById('cfg-vk-height-val').textContent=`${height.value}px`;
-  font.oninput=()=>document.getElementById('cfg-vk-font-val').textContent=`${font.value}px`;
+  width.value=cfg.vkWidth||VK_DEFAULTS.vkWidth;
+  height.value=cfg.vkHeight||VK_DEFAULTS.vkHeight;
+  font.value=cfg.vkFont||VK_DEFAULTS.vkFont;
+  const wVal=document.getElementById('cfg-vk-width-val');
+  const hVal=document.getElementById('cfg-vk-height-val');
+  const fVal=document.getElementById('cfg-vk-font-val');
+  if(wVal)wVal.textContent=`${width.value}%`;
+  if(hVal)hVal.textContent=`${height.value}px`;
+  if(fVal)fVal.textContent=`${font.value}px`;
+  width.oninput=()=>{if(wVal)wVal.textContent=`${width.value}%`};
+  height.oninput=()=>{if(hVal)hVal.textContent=`${height.value}px`};
+  font.oninput=()=>{if(fVal)fVal.textContent=`${font.value}px`};
+}
+
+function resetVkDefaults(){
+  const tog=id=>document.getElementById(id);
+  tog('tog-vk-enabled').checked=VK_DEFAULTS.vkEnabled;
+  tog('tog-vk-autoshow').checked=VK_DEFAULTS.vkAutoShow;
+  tog('cfg-vk-mode').value=VK_DEFAULTS.vkMode;
+  tog('cfg-vk-layout').value=VK_DEFAULTS.vkLayout;
+  const w=tog('cfg-vk-width');
+  const h=tog('cfg-vk-height');
+  const f=tog('cfg-vk-font');
+  if(w){w.value=VK_DEFAULTS.vkWidth;document.getElementById('cfg-vk-width-val').textContent=`${VK_DEFAULTS.vkWidth}%`}
+  if(h){h.value=VK_DEFAULTS.vkHeight;document.getElementById('cfg-vk-height-val').textContent=`${VK_DEFAULTS.vkHeight}px`}
+  if(f){f.value=VK_DEFAULTS.vkFont;document.getElementById('cfg-vk-font-val').textContent=`${VK_DEFAULTS.vkFont}px`}
+  showToast('Keyboard reset to defaults','ok');
 }
 
 function getCurrentVkLayout(){
