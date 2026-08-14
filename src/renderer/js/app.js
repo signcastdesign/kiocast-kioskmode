@@ -142,10 +142,6 @@ function openSettings(){
   document.getElementById('tog-hide-toolbar').checked=cfg.hideToolbar;
   document.getElementById('tog-show-keyboard-btn').checked=cfg.showKeyboardButton!==false;
   document.getElementById('tog-show-nav-buttons').checked=cfg.showNavButtons!==false;
-  document.getElementById('tog-vk-enabled').checked=cfg.vkEnabled;
-  document.getElementById('tog-vk-autoshow').checked=cfg.vkAutoShow!==false;
-  document.getElementById('cfg-vk-mode').value=cfg.vkMode||'fixed';
-  document.getElementById('cfg-vk-layout').value=cfg.vkLayout||'en';
   document.getElementById('cfg-pin').value='';
   document.getElementById('cfg-pin-new').value='';
   document.getElementById('cfg-pin-confirm').value='';
@@ -438,37 +434,95 @@ function initKioskBoard(){
 
 const VK_DEFAULTS={vkEnabled:true,vkAutoShow:true,vkMode:'fixed',vkLayout:'en',vkWidth:100,vkHeight:56,vkFont:20};
 
+function _vkLiveApply(){
+  cfg.vkEnabled=document.getElementById('tog-vk-enabled')?.checked??cfg.vkEnabled;
+  cfg.vkAutoShow=document.getElementById('tog-vk-autoshow')?.checked??cfg.vkAutoShow;
+  cfg.vkMode=document.getElementById('cfg-vk-mode')?.value||cfg.vkMode;
+  cfg.vkLayout=document.getElementById('cfg-vk-layout')?.value||cfg.vkLayout;
+  cfg.vkWidth=parseInt(document.getElementById('cfg-vk-width')?.value)||cfg.vkWidth;
+  cfg.vkHeight=parseInt(document.getElementById('cfg-vk-height')?.value)||cfg.vkHeight;
+  cfg.vkFont=parseInt(document.getElementById('cfg-vk-font')?.value)||cfg.vkFont;
+  kioskBoardSignature='';
+  applyVirtualKeyboardStyle();
+  if(cfg.vkEnabled)initKioskBoard();
+  else hideVirtualKeyboard(true);
+}
+
 function renderVirtualKeyboardSettings(){
   const width=document.getElementById('cfg-vk-width');
   const height=document.getElementById('cfg-vk-height');
   const font=document.getElementById('cfg-vk-font');
+  const modeEl=document.getElementById('cfg-vk-mode');
+  const layoutEl=document.getElementById('cfg-vk-layout');
+  const enabledEl=document.getElementById('tog-vk-enabled');
+  const autoshowEl=document.getElementById('tog-vk-autoshow');
   if(!width||!height||!font)return;
+
   width.value=cfg.vkWidth||VK_DEFAULTS.vkWidth;
   height.value=cfg.vkHeight||VK_DEFAULTS.vkHeight;
   font.value=cfg.vkFont||VK_DEFAULTS.vkFont;
+  if(modeEl)modeEl.value=cfg.vkMode||VK_DEFAULTS.vkMode;
+  if(layoutEl)layoutEl.value=cfg.vkLayout||VK_DEFAULTS.vkLayout;
+  if(enabledEl)enabledEl.checked=cfg.vkEnabled;
+  if(autoshowEl)autoshowEl.checked=cfg.vkAutoShow!==false;
+
   const wVal=document.getElementById('cfg-vk-width-val');
   const hVal=document.getElementById('cfg-vk-height-val');
   const fVal=document.getElementById('cfg-vk-font-val');
   if(wVal)wVal.textContent=`${width.value}%`;
   if(hVal)hVal.textContent=`${height.value}px`;
   if(fVal)fVal.textContent=`${font.value}px`;
-  width.oninput=()=>{if(wVal)wVal.textContent=`${width.value}%`};
-  height.oninput=()=>{if(hVal)hVal.textContent=`${height.value}px`};
-  font.oninput=()=>{if(fVal)fVal.textContent=`${font.value}px`};
+
+  width.oninput=()=>{
+    if(wVal)wVal.textContent=`${width.value}%`;
+    cfg.vkWidth=parseInt(width.value)||100;
+    kioskBoardSignature='';
+    applyKioskBoardStyle();
+    applyVirtualKeyboardStyle();
+    window.kioskElectron?.setKeyboardConfig?.({enabled:!!cfg.vkEnabled,layout:cfg.vkLayout||'en',width:cfg.vkWidth,height:cfg.vkHeight,font:cfg.vkFont});
+  };
+  height.oninput=()=>{
+    if(hVal)hVal.textContent=`${height.value}px`;
+    cfg.vkHeight=parseInt(height.value)||56;
+    kioskBoardSignature='';
+    applyKioskBoardStyle();
+    window.kioskElectron?.setKeyboardConfig?.({enabled:!!cfg.vkEnabled,layout:cfg.vkLayout||'en',width:cfg.vkWidth,height:cfg.vkHeight,font:cfg.vkFont});
+  };
+  font.oninput=()=>{
+    if(fVal)fVal.textContent=`${font.value}px`;
+    cfg.vkFont=parseInt(font.value)||20;
+    kioskBoardSignature='';
+    applyKioskBoardStyle();
+    window.kioskElectron?.setKeyboardConfig?.({enabled:!!cfg.vkEnabled,layout:cfg.vkLayout||'en',width:cfg.vkWidth,height:cfg.vkHeight,font:cfg.vkFont});
+  };
+  if(modeEl)modeEl.onchange=()=>{cfg.vkMode=modeEl.value;_vkLiveApply()};
+  if(layoutEl)layoutEl.onchange=()=>{cfg.vkLayout=layoutEl.value;kioskBoardSignature='';_vkLiveApply()};
+  if(enabledEl)enabledEl.onchange=()=>_vkLiveApply();
+  if(autoshowEl)autoshowEl.onchange=()=>{cfg.vkAutoShow=autoshowEl.checked};
 }
 
 function resetVkDefaults(){
-  const tog=id=>document.getElementById(id);
-  tog('tog-vk-enabled').checked=VK_DEFAULTS.vkEnabled;
-  tog('tog-vk-autoshow').checked=VK_DEFAULTS.vkAutoShow;
-  tog('cfg-vk-mode').value=VK_DEFAULTS.vkMode;
-  tog('cfg-vk-layout').value=VK_DEFAULTS.vkLayout;
-  const w=tog('cfg-vk-width');
-  const h=tog('cfg-vk-height');
-  const f=tog('cfg-vk-font');
-  if(w){w.value=VK_DEFAULTS.vkWidth;document.getElementById('cfg-vk-width-val').textContent=`${VK_DEFAULTS.vkWidth}%`}
-  if(h){h.value=VK_DEFAULTS.vkHeight;document.getElementById('cfg-vk-height-val').textContent=`${VK_DEFAULTS.vkHeight}px`}
-  if(f){f.value=VK_DEFAULTS.vkFont;document.getElementById('cfg-vk-font-val').textContent=`${VK_DEFAULTS.vkFont}px`}
+  const g=id=>document.getElementById(id);
+  g('tog-vk-enabled').checked=VK_DEFAULTS.vkEnabled;
+  g('tog-vk-autoshow').checked=VK_DEFAULTS.vkAutoShow;
+  g('cfg-vk-mode').value=VK_DEFAULTS.vkMode;
+  g('cfg-vk-layout').value=VK_DEFAULTS.vkLayout;
+  const w=g('cfg-vk-width');
+  const h=g('cfg-vk-height');
+  const f=g('cfg-vk-font');
+  if(w){w.value=VK_DEFAULTS.vkWidth;g('cfg-vk-width-val').textContent=`${VK_DEFAULTS.vkWidth}%`}
+  if(h){h.value=VK_DEFAULTS.vkHeight;g('cfg-vk-height-val').textContent=`${VK_DEFAULTS.vkHeight}px`}
+  if(f){f.value=VK_DEFAULTS.vkFont;g('cfg-vk-font-val').textContent=`${VK_DEFAULTS.vkFont}px`}
+  cfg.vkEnabled=VK_DEFAULTS.vkEnabled;
+  cfg.vkAutoShow=VK_DEFAULTS.vkAutoShow;
+  cfg.vkMode=VK_DEFAULTS.vkMode;
+  cfg.vkLayout=VK_DEFAULTS.vkLayout;
+  cfg.vkWidth=VK_DEFAULTS.vkWidth;
+  cfg.vkHeight=VK_DEFAULTS.vkHeight;
+  cfg.vkFont=VK_DEFAULTS.vkFont;
+  kioskBoardSignature='';
+  applyVirtualKeyboardStyle();
+  if(cfg.vkEnabled)initKioskBoard();
   showToast('Keyboard reset to defaults','ok');
 }
 
