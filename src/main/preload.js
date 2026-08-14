@@ -43,4 +43,10 @@ contextBridge.exposeInMainWorld('kioskElectron', {
 
   /** Exit the kiosk app through the protected admin UI. */
   exitApp:        ()        => ipcRenderer.invoke('exit-app'),
+
+  /** Enable or disable Windows startup registration. */
+  setAutoStart:   (enable)  => ipcRenderer.invoke('set-autostart', enable),
+
+  /** Check whether startup registration is currently active. */
+  getAutoStart:   ()        => ipcRenderer.invoke('get-autostart'),
 });

@@ -684,6 +684,29 @@ ipcMain.handle('exit-app', async () => {
   return true;
 });
 
+ipcMain.handle('set-autostart', (_event, enable) => {
+  try {
+    if (process.platform !== 'win32') return false;
+    app.setLoginItemSettings({
+      openAtLogin: !!enable,
+      openAsHidden: false,
+      args: ['--autostart'],
+    });
+    return true;
+  } catch (_) {
+    return false;
+  }
+});
+
+ipcMain.handle('get-autostart', () => {
+  try {
+    if (process.platform !== 'win32') return false;
+    return app.getLoginItemSettings().openAtLogin;
+  } catch (_) {
+    return false;
+  }
+});
+
 // ── Lifecycle ─────────────────────────────────────────────────────────────────
 
 app.whenReady().then(() => {

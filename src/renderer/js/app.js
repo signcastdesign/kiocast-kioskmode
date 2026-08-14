@@ -9,6 +9,8 @@ let cfg={
   strictMode:true, idleTimeout:0, hideToolbar:false, showKeyboardButton:true, showNavButtons:true,
   vkEnabled:true, vkAutoShow:true, vkMode:'fixed', vkLayout:'en', vkWidth:100, vkHeight:56, vkFont:20,
   vkFloatX:20, vkFloatY:null,
+  useCustomLogo:false, customLogo:'',
+  runOnStartup:false,
 };
 let activityLog=[];
 let pinBuffer='', pinPurpose='';
@@ -78,6 +80,10 @@ function openSettings(){
   document.getElementById('cfg-pin').value='';
   document.getElementById('cfg-pin-new').value='';
   document.getElementById('cfg-pin-confirm').value='';
+  document.getElementById('tog-autostart').checked=!!cfg.runOnStartup;
+  document.getElementById('tog-custom-logo').checked=!!cfg.useCustomLogo;
+  toggleLogoSection();
+  refreshLogoPreview();
   renderDomainList();renderQNavList();renderVirtualKeyboardSettings();refreshUpdateState();switchTab(0);
   document.getElementById('settings-overlay').classList.add('open');
 }
@@ -101,8 +107,12 @@ function saveSettings(){
   cfg.vkHeight=parseInt(document.getElementById('cfg-vk-height').value)||56;
   cfg.vkFont=parseInt(document.getElementById('cfg-vk-font').value)||20;
   cfg.idleTimeout=parseInt(document.getElementById('cfg-idle').value)||0;
+  cfg.useCustomLogo=document.getElementById('tog-custom-logo').checked;
+  const prevAutostart=cfg.runOnStartup;
+  cfg.runOnStartup=document.getElementById('tog-autostart').checked;
   cfg.domains=dedupeDomains(cfg.domains);
   saveCfg();applySettings();closeSettings();
+  if(cfg.runOnStartup!==prevAutostart)applyAutoStart(cfg.runOnStartup);
   if(newUrl&&newUrl!==cfg.url){cfg.url=newUrl;saveCfg();navigateTo(newUrl)}
   log('info','Settings saved');showToast('Settings saved','ok');
 }
@@ -126,7 +136,7 @@ function applySettings(){
   updateUrlBar(cfg.url||'');
   document.getElementById('status-dot').className=cfg.url?'live':'';
   renderQuickNavBtns();
-  // Guard overlay: active whenever domain list is non-empty
+  applyCustomLogo();
   updateGuard();
   if(!cfg.vkEnabled)hideVirtualKeyboard(true);else initKioskBoard();
 }
@@ -850,6 +860,112 @@ function escH(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').rep
 function escA(s){return escH(s).replace(/"/g,'&quot;').replace(/'/g,'&#39;')}
 
 /* ═══════════════════════════════════════════════════
+   CUSTOM LOGO
+═══════════════════════════════════════════════════ */
+function applyCustomLogo(){
+  const wordmark=document.getElementById('logo-wordmark');
+  const img=document.getElementById('logo-custom-img');
+  if(!wordmark||!img)return;
+  if(cfg.useCustomLogo&&cfg.customLogo){
+    wordmark.style.display='none';
+    img.src=cfg.customLogo;
+    img.style.display='block';
+  }else{
+    wordmark.style.display='';
+    img.src='';
+    img.style.display='none';
+  }
+}
+
+function toggleLogoSection(){
+  const on=document.getElementById('tog-custom-logo')?.checked;
+  const section=document.getElementById('logo-upload-section');
+  if(section)section.style.display=on?'block':'none';
+}
+
+function refreshLogoPreview(){
+  const empty=document.getElementById('logo-preview-empty');
+  const img=document.getElementById('logo-preview-img');
+  if(!empty||!img)return;
+  if(cfg.customLogo){
+    img.src=cfg.customLogo;
+    img.style.display='block';
+    empty.style.display='none';
+  }else{
+    img.src='';
+    img.style.display='none';
+    empty.style.display='';
+  }
+}
+
+function switchLogoTab(tab){
+  document.getElementById('logo-panel-file').style.display=tab==='file'?'block':'none';
+  document.getElementById('logo-panel-url').style.display=tab==='url'?'block':'none';
+  document.getElementById('logo-tab-file').classList.toggle('active',tab==='file');
+  document.getElementById('logo-tab-url').classList.toggle('active',tab==='url');
+}
+
+function handleLogoFile(input){
+  const file=input.files&&input.files[0];
+  if(!file)return;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    cfg.customLogo=e.target.result;
+    cfg.useCustomLogo=true;
+    document.getElementById('tog-custom-logo').checked=true;
+    toggleLogoSection();
+    refreshLogoPreview();
+    saveCfg();
+    applyCustomLogo();
+    showToast('Logo applied','ok');
+  };
+  reader.readAsDataURL(file);
+  input.value='';
+}
+
+function applyLogoUrl(){
+  const val=(document.getElementById('logo-url-input')?.value||'').trim();
+  if(!val){showToast('Enter a valid URL','error');return}
+  try{new URL(val)}catch(e){showToast('Invalid URL','error');return}
+  cfg.customLogo=val;
+  cfg.useCustomLogo=true;
+  document.getElementById('tog-custom-logo').checked=true;
+  toggleLogoSection();
+  refreshLogoPreview();
+  saveCfg();
+  applyCustomLogo();
+  showToast('Logo applied','ok');
+}
+
+function clearCustomLogo(){
+  cfg.customLogo='';
+  cfg.useCustomLogo=false;
+  document.getElementById('tog-custom-logo').checked=false;
+  toggleLogoSection();
+  refreshLogoPreview();
+  saveCfg();
+  applyCustomLogo();
+  showToast('Logo removed','ok');
+}
+
+/* ═══════════════════════════════════════════════════
+   AUTO-START
+═══════════════════════════════════════════════════ */
+async function applyAutoStart(enable){
+  if(!window.kioskElectron?.setAutoStart){
+    showToast('Auto-start requires the installed app','error');
+    return;
+  }
+  try{
+    await window.kioskElectron.setAutoStart(enable);
+    log('info',enable?'Auto-start enabled':'Auto-start disabled');
+    showToast(enable?'Will run at Windows startup':'Auto-start disabled','ok');
+  }catch(e){
+    showToast('Auto-start failed','error');
+  }
+}
+
+/* ═══════════════════════════════════════════════════
    NAVIGATION & DOMAIN GUARD
 ═══════════════════════════════════════════════════ */
 function normalizeUrl(u){return(u.startsWith('http://')||u.startsWith('https://'))?u:'https://'+u}
@@ -1331,4 +1447,9 @@ if(!window.kioskElectron&&'serviceWorker'in navigator)navigator.serviceWorker.re
 loadCfg();applySettings();updateNavButtons();
 if(window.kioskElectron?.onUpdateState)window.kioskElectron.onUpdateState(renderUpdateState);
 refreshUpdateState();
+if(window.kioskElectron?.getAutoStart){
+  window.kioskElectron.getAutoStart().then(on=>{
+    if(on!==undefined)cfg.runOnStartup=!!on;
+  }).catch(()=>{});
+}
 if(cfg.url)navigateTo(cfg.url);else openSettings();
