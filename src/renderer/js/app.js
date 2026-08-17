@@ -787,7 +787,7 @@ function resetVirtualKeyboardIntent(){
 }
 
 function isVirtualKeyboardVisible(){
-  const kb=document.querySelector('.kioskboard-wrapper');
+  const kb=document.getElementById('KioskBoard-VirtualKeyboard');
   if(!kb)return false;
   const style=getComputedStyle(kb);
   const rect=kb.getBoundingClientRect();
@@ -795,6 +795,10 @@ function isVirtualKeyboardVisible(){
 }
 
 function purgeVirtualKeyboardDom(){
+  try{
+    const mainKb=document.getElementById('KioskBoard-VirtualKeyboard');
+    if(mainKb)mainKb.remove();
+  }catch(e){}
   try{document.querySelectorAll('.kioskboard-wrapper').forEach(kb=>kb.remove());}catch(e){}
   try{document.body.classList.remove('kioskboard-body-padding');}catch(e){}
   try{document.body.style.paddingBottom='';}catch(e){}
@@ -883,7 +887,7 @@ function showVirtualKeyboard(reason='show'){
     el.setAttribute('data-kioskboard-placement','bottom');
     el.setAttribute('data-kioskboard-specialcharacters',cfg.vkLayout==='numeric'?'false':'true');
   }
-  if(!document.querySelector('.kioskboard-wrapper')){
+  if(!document.getElementById('KioskBoard-VirtualKeyboard')){
     window.KioskBoard.run(KIOSKBOARD_SELECTOR,kioskBoardOptions());
     kioskBoardSignature=`${cfg.vkLayout}|${cfg.vkWidth}|${cfg.vkHeight}|${cfg.vkFont}|${cfg.vkEnabled}`;
   }
