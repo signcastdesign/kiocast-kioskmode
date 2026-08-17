@@ -787,7 +787,22 @@ function resetVirtualKeyboardIntent(){
 }
 
 function isVirtualKeyboardVisible(){
-  return !!document.querySelector('.kioskboard-wrapper');
+  const kb=document.querySelector('.kioskboard-wrapper');
+  if(!kb)return false;
+  const style=getComputedStyle(kb);
+  const rect=kb.getBoundingClientRect();
+  return style.display!=='none'&&style.visibility!=='hidden'&&style.opacity!=='0'&&rect.height>24&&rect.bottom>0&&rect.top<window.innerHeight-8;
+}
+
+function purgeVirtualKeyboardDom(){
+  try{document.querySelectorAll('.kioskboard-wrapper').forEach(kb=>kb.remove());}catch(e){}
+  try{document.body.classList.remove('kioskboard-body-padding');}catch(e){}
+  try{document.body.style.paddingBottom='';}catch(e){}
+  try{
+    const vk=document.getElementById('vk-overlay');
+    if(vk)vk.classList.remove('visible','dragging');
+  }catch(e){}
+  updateVirtualKeyboardTriggerButton();
 }
 
 function updateVirtualKeyboardTriggerButton(){
@@ -855,6 +870,7 @@ function showVirtualKeyboard(reason='show'){
   if(!cfg.vkEnabled||!window.KioskBoard)return;
   if(vkPhysicalKeyAt&&Date.now()-vkPhysicalKeyAt<2000&&reason!=='manual-toggle')return;
   clearTimeout(vkHideTimer);
+  if(!isVirtualKeyboardVisible())purgeVirtualKeyboardDom();
   prepareKioskBoardTargets(document);
   applyKioskBoardStyle();
   const active=vkTarget||document.activeElement;
@@ -888,11 +904,8 @@ function hideVirtualKeyboard(immediate=false,reason='hide'){
     vkManualHideTimer=setTimeout(()=>{vkManualHidden=false;},1200);
   }
   const close=()=>{
-    try{
-      const kb=document.querySelector('.kioskboard-wrapper');
-      if(kb)kb.remove();
-    }catch(e){}
-    updateVirtualKeyboardTriggerButton();
+    purgeVirtualKeyboardDom();
+    setTimeout(purgeVirtualKeyboardDom,220);
   };
   if(immediate)close();else setTimeout(close,60);
 }
@@ -901,12 +914,12 @@ function toggleManualVirtualKeyboard(){
   const now=Date.now();
   if(now-vkLastToggleAt<450)return;
   vkLastToggleAt=now;
-  const kb=document.querySelector('.kioskboard-wrapper');
-  if(kb){
+  if(isVirtualKeyboardVisible()){
     vkForcedOpen=false;
     hideVirtualKeyboard(true,'manual-toggle');
     return;
   }
+  purgeVirtualKeyboardDom();
   vkForcedOpen=true;
   vkPhysicalKeyAt=0;
   resetVirtualKeyboardManualHide();
