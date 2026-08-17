@@ -41,6 +41,7 @@ let vkProbeTimer=null;
 let vkForcedOpen=false;
 let vkStateCheckPending=false;
 let vkIframeProbeUntil=0;
+let vkPhysicalKeyAt=0;
 let exitInProgress=false;
 let activeConfirmResolve=null;
 let pinFailCount=0;
@@ -836,30 +837,29 @@ function sendVirtualKeyboardInput(payload){
 function showVirtualKeyboard(reason='show'){
   vkLastReason=reason;
   if(!cfg.vkEnabled||!window.KioskBoard)return;
+  if(vkPhysicalKeyAt&&Date.now()-vkPhysicalKeyAt<2000&&reason!=='manual-toggle')return;
+  clearTimeout(vkHideTimer);
   const el=vkTarget||document.activeElement;
-  if(!el||!isVirtualKeyboardInput(el))return;
-  el.classList.add(KIOSKBOARD_SELECTOR.slice(1));
-  el.setAttribute('data-kioskboard-type',
-    (cfg.vkLayout==='numeric'||(el.type||'').toLowerCase()==='number'||(el.type||'').toLowerCase()==='tel')
-    ?'numpad':'all');
-  el.setAttribute('data-kioskboard-placement','bottom');
-  el.setAttribute('data-kioskboard-specialcharacters',cfg.vkLayout==='numeric'?'false':'true');
-  const runAndFocus=()=>{
+  if(el&&isVirtualKeyboardInput(el)){
+    el.classList.add(KIOSKBOARD_SELECTOR.slice(1));
+    el.setAttribute('data-kioskboard-type',
+      (cfg.vkLayout==='numeric'||(el.type||'').toLowerCase()==='number'||(el.type||'').toLowerCase()==='tel')
+      ?'numpad':'all');
+    el.setAttribute('data-kioskboard-placement','bottom');
+    el.setAttribute('data-kioskboard-specialcharacters',cfg.vkLayout==='numeric'?'false':'true');
+  }
+  if(!document.querySelector('.kioskboard-wrapper')){
     window.KioskBoard.run(KIOSKBOARD_SELECTOR,kioskBoardOptions());
     kioskBoardSignature=`${cfg.vkLayout}|${cfg.vkWidth}|${cfg.vkHeight}|${cfg.vkFont}|${cfg.vkEnabled}`;
-    requestAnimationFrame(()=>{
-      el.blur();
-      requestAnimationFrame(()=>el.focus({preventScroll:true}));
-    });
-  };
-  if(!document.querySelector('.kioskboard-wrapper')){
-    runAndFocus();
+    if(el&&isVirtualKeyboardInput(el)){
+      requestAnimationFrame(()=>{el.blur();requestAnimationFrame(()=>el.focus({preventScroll:true}));});
+    }
   } else {
-    requestAnimationFrame(()=>{
-      el.blur();
-      requestAnimationFrame(()=>el.focus({preventScroll:true}));
-    });
+    if(el&&isVirtualKeyboardInput(el)){
+      requestAnimationFrame(()=>{el.blur();requestAnimationFrame(()=>el.focus({preventScroll:true}));});
+    }
   }
+  updateVirtualKeyboardTriggerButton();
 }
 
 function hideVirtualKeyboard(immediate=false,reason='hide'){
@@ -888,18 +888,15 @@ function hideVirtualKeyboard(immediate=false,reason='hide'){
 function toggleManualVirtualKeyboard(){
   const kb=document.querySelector('.kioskboard-wrapper');
   if(kb){
+    vkForcedOpen=false;
     hideVirtualKeyboard(true,'manual-toggle');
     return;
   }
-  const target=getVirtualKeyboardTarget();
-  if(target){
-    resetVirtualKeyboardManualHide();
-    markVirtualKeyboardPointerIntent();
-    vkTarget=target;
-    showVirtualKeyboard('manual-toggle');
-    return;
-  }
-  showToast('Select a text field first','ok');
+  vkForcedOpen=true;
+  vkPhysicalKeyAt=0;
+  resetVirtualKeyboardManualHide();
+  markVirtualKeyboardPointerIntent();
+  showVirtualKeyboard('manual-toggle');
 }
 
 function syncVirtualKeyboardToFocus(){
@@ -1335,6 +1332,10 @@ document.addEventListener('keydown',e=>{
     if(e.ctrlKey&&'rRtTwWnNlLuUpPsS'.includes(e.key)){e.preventDefault();return}
     if(e.altKey&&['F4','Left','Right'].includes(e.key)){e.preventDefault();return}
   }
+  if(!e.ctrlKey&&!e.altKey&&!e.metaKey&&e.key.length===1&&cfg.vkEnabled){
+    vkPhysicalKeyAt=Date.now();
+    if(!vkForcedOpen)hideVirtualKeyboard(false,'physical-key');
+  }
 });
 document.addEventListener('focusin',e=>{
   if(!cfg.vkEnabled||!cfg.vkAutoShow)return;
@@ -1352,6 +1353,7 @@ document.addEventListener('pointerdown',e=>{
   const vk=document.getElementById('vk-overlay');
   if(vk.contains(e.target))return;
   if(e.target.closest('#vk-trigger'))return;
+  vkPhysicalKeyAt=0;
   if(isVirtualKeyboardInput(e.target)){
     resetVirtualKeyboardManualHide();
     markVirtualKeyboardPointerIntent();
