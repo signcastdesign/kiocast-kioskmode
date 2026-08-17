@@ -42,6 +42,7 @@ let vkForcedOpen=false;
 let vkStateCheckPending=false;
 let vkIframeProbeUntil=0;
 let vkPhysicalKeyAt=0;
+let vkLastToggleAt=0;
 let exitInProgress=false;
 let activeConfirmResolve=null;
 let pinFailCount=0;
@@ -870,12 +871,9 @@ function showVirtualKeyboard(reason='show'){
     window.KioskBoard.run(KIOSKBOARD_SELECTOR,kioskBoardOptions());
     kioskBoardSignature=`${cfg.vkLayout}|${cfg.vkWidth}|${cfg.vkHeight}|${cfg.vkFont}|${cfg.vkEnabled}`;
   }
-  requestAnimationFrame(()=>{
-    try{el.focus({preventScroll:true});}catch(e){}
-    el.dispatchEvent(new Event('focus',{bubbles:false}));
-    el.dispatchEvent(new Event('focusin',{bubbles:true}));
-    el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,view:window}));
-  });
+  if(reason==='manual-toggle'&&el.id==='ks-keyboard-anchor'){
+    requestAnimationFrame(()=>{try{el.focus({preventScroll:true});}catch(e){}});
+  }
   updateVirtualKeyboardTriggerButton();
 }
 
@@ -900,6 +898,9 @@ function hideVirtualKeyboard(immediate=false,reason='hide'){
 }
 
 function toggleManualVirtualKeyboard(){
+  const now=Date.now();
+  if(now-vkLastToggleAt<450)return;
+  vkLastToggleAt=now;
   const kb=document.querySelector('.kioskboard-wrapper');
   if(kb){
     vkForcedOpen=false;
@@ -1460,8 +1461,7 @@ document.addEventListener('pointerup',()=>{
     e.stopPropagation();
     toggleManualVirtualKeyboard();
   };
-  vkTrigger.addEventListener('pointerdown',onVkTrigger);
-  vkTrigger.addEventListener('touchstart',onVkTrigger,{passive:false});
+  vkTrigger.addEventListener('click',onVkTrigger);
 }
 window.addEventListener('resize',()=>applyVirtualKeyboardStyle());
 
