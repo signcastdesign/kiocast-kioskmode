@@ -1056,6 +1056,11 @@ function addQNav(){
   document.getElementById('qn-url').value='';
   renderQNavList();
 }
+function useAutoFavicon(){
+  const iconInput=document.getElementById('qn-icon-url');
+  if(iconInput)iconInput.value='';
+  showToast('Automatic favicon enabled','ok');
+}
 function removeQNav(id){cfg.quickNavBtns=cfg.quickNavBtns.filter(b=>b.id!==id);renderQNavList()}
 
 function moveQNav(i,dir){

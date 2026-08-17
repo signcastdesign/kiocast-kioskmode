@@ -263,10 +263,20 @@
         <div class="sp-label">Quick Navigation Buttons</div>
         <div class="sp-help">Buttons appear in the topbar. Favicons are pulled from each website automatically. Add a custom icon URL only when you want to override the favicon.</div>
         <div class="qnav-form">
-          <input class="sp-input" id="qn-icon-url" type="url" placeholder="Custom icon URL (optional)">
-          <input class="sp-input" id="qn-label" type="text" placeholder="Label">
-          <input class="sp-input" id="qn-url" type="url" placeholder="https://...">
-          <button class="sp-btn" onclick="addQNav()">ADD</button>
+          <label class="qnav-field qnav-label-field">
+            <span>Button label</span>
+            <input class="sp-input" id="qn-label" type="text" placeholder="Signcast">
+          </label>
+          <label class="qnav-field qnav-url-field">
+            <span>Website URL</span>
+            <input class="sp-input" id="qn-url" type="url" placeholder="https://example.com">
+          </label>
+          <label class="qnav-field qnav-icon-field">
+            <span>Custom icon URL</span>
+            <input class="sp-input" id="qn-icon-url" type="url" placeholder="Optional override">
+          </label>
+          <button class="sp-btn ghost qnav-favicon-btn" type="button" onclick="useAutoFavicon()">USE FAVICON</button>
+          <button class="sp-btn qnav-add-btn" type="button" onclick="addQNav()">+ ADD BUTTON</button>
         </div>
         <div id="qnav-list"></div>
       </div>
