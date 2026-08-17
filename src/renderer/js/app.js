@@ -887,8 +887,12 @@ function showVirtualKeyboard(reason='show'){
     window.KioskBoard.run(KIOSKBOARD_SELECTOR,kioskBoardOptions());
     kioskBoardSignature=`${cfg.vkLayout}|${cfg.vkWidth}|${cfg.vkHeight}|${cfg.vkFont}|${cfg.vkEnabled}`;
   }
-  if(reason==='manual-toggle'&&el.id==='ks-keyboard-anchor'){
-    requestAnimationFrame(()=>{try{el.focus({preventScroll:true});}catch(e){}});
+  if(reason==='manual-toggle'&&el){
+    try{el.blur();}catch(e){}
+    requestAnimationFrame(()=>{
+      try{el.focus({preventScroll:true});}catch(e){}
+      try{el.dispatchEvent(new Event('focus',{bubbles:true}));}catch(e){}
+    });
   }
   updateVirtualKeyboardTriggerButton();
 }
@@ -904,6 +908,10 @@ function hideVirtualKeyboard(immediate=false,reason='hide'){
     vkManualHideTimer=setTimeout(()=>{vkManualHidden=false;},1200);
   }
   const close=()=>{
+    try{
+      const anchor=document.getElementById('ks-keyboard-anchor');
+      if(anchor&&document.activeElement===anchor)anchor.blur();
+    }catch(e){}
     purgeVirtualKeyboardDom();
     setTimeout(purgeVirtualKeyboardDom,220);
   };
