@@ -424,7 +424,7 @@ function kioskBoardOptions(){
     autoScroll:false,
     capsLockActive:false,
     allowRealKeyboard:true,
-    allowMobileKeyboard:false,
+    allowMobileKeyboard:true,
     cssAnimations:true,
     cssAnimationsDuration:180,
     cssAnimationsStyle:'slide',
