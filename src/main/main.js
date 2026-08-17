@@ -1,26 +1,39 @@
 /**
  * KioskShell — Electron main process
  */
-const { app, BrowserWindow, ipcMain, screen, Menu, session } = require('electron');
+const { app, BrowserWindow, ipcMain, screen, Menu, session, powerSaveBlocker } = require('electron');
 const fs = require('fs');
 const path = require('path');
-const { execFile } = require('child_process');
+const { execFile, exec } = require('child_process');
 const { autoUpdater } = require('electron-updater');
+const crypto = require('crypto');
 
-// Disable web security globally so the renderer can access cross-origin iframe
-// contentWindow. This does NOT affect the GPU compositor and does NOT break
-// fullscreen.
 app.commandLine.appendSwitch('disable-web-security');
 app.commandLine.appendSwitch('disable-site-isolation-trials');
-// Disable Chromium's native touch virtual keyboard so it doesn't conflict with our custom one
 app.commandLine.appendSwitch('disable-touch-virtual-keyboard');
-// Use software rendering to avoid GPU helper crashes in restricted environments.
 app.disableHardwareAcceleration();
-// Keep Chromium cache/session storage in a writable temp directory.
-const appDataRoot = path.join(app.getPath('temp'), 'kioskshell-data');
-fs.mkdirSync(appDataRoot, { recursive: true });
-app.setPath('userData', appDataRoot);
-app.setPath('sessionData', path.join(appDataRoot, 'session'));
+
+// ── Stable config path (survives temp cleanup / reinstall) ───────────────────
+const stableDataRoot = path.join(app.getPath('appData'), 'KioskShell');
+fs.mkdirSync(stableDataRoot, { recursive: true });
+app.setPath('userData', stableDataRoot);
+app.setPath('sessionData', path.join(stableDataRoot, 'session'));
+
+// ── File-based config backup alongside localStorage ──────────────────────────
+const CFG_BACKUP_PATH = path.join(stableDataRoot, 'kiosk-config.json');
+function readCfgBackup() {
+  try { return JSON.parse(fs.readFileSync(CFG_BACKUP_PATH, 'utf8')); } catch (_) { return null; }
+}
+function writeCfgBackup(data) {
+  try { fs.writeFileSync(CFG_BACKUP_PATH, JSON.stringify(data), 'utf8'); } catch (_) {}
+}
+
+// ── Admin session token ──────────────────────────────────────────────────────
+// Generated fresh each launch; renderer requests it after PIN auth, then passes
+// it back for every destructive IPC call so the main process can verify the
+// caller actually went through the auth flow.
+const ADMIN_SESSION_TOKEN = crypto.randomBytes(32).toString('hex');
+let adminSessionGranted = false;
 
 let win;
 let forceFullscreen = false;
@@ -427,9 +440,25 @@ function createWindow() {
   });
   win.webContents.on('render-process-gone', (_event, details) => {
     console.error(`[render-process-gone] reason=${details.reason} exitCode=${details.exitCode}`);
+    if (!allowAppExit && details.reason !== 'clean-exit') {
+      setTimeout(() => {
+        if (!win || win.isDestroyed()) return;
+        win.webContents.reload();
+      }, 1500);
+    }
   });
   win.webContents.on('unresponsive', () => {
     console.error('[renderer] window became unresponsive');
+    if (!allowAppExit) {
+      setTimeout(() => {
+        if (!win || win.isDestroyed()) return;
+        if (win.webContents.isDevToolsOpened()) return;
+        win.webContents.forcefullyCrashRenderer?.();
+      }, 8000);
+    }
+  });
+  win.webContents.on('responsive', () => {
+    console.log('[renderer] window became responsive again');
   });
 
   // ── Fullscreen state relay ────────────────────────────────────────────────
@@ -443,6 +472,22 @@ function createWindow() {
   // Re-enter fullscreen when forceFullscreen is on
   win.on('leave-full-screen',      () => { if (forceFullscreen) setTimeout(enforceKioskWindow, 100); });
   win.on('leave-html-full-screen', () => { if (forceFullscreen) setTimeout(enforceKioskWindow, 100); });
+}
+
+// ── Domain allow-list (main-process copy, enforced at network boundary) ───────
+let mainDomains = [];
+let mainStrictMode = true;
+
+function normalizeDomainMain(v) {
+  return String(v || '').trim().toLowerCase()
+    .replace(/^https?:\/\//, '').replace(/^\*\./, '').replace(/\/.*$/, '')
+    .replace(/:\d+$/, '').replace(/^www\./, '').replace(/\.+$/, '');
+}
+
+function isDomainAllowedMain(hostname) {
+  if (!mainDomains.length) return true;
+  const h = normalizeDomainMain(hostname);
+  return mainDomains.some(d => h === d || h.endsWith('.' + d));
 }
 
 // ── IPC ───────────────────────────────────────────────────────────────────────
@@ -681,7 +726,8 @@ ipcMain.handle('lockdown-windows', async () => {
   });
 });
 
-ipcMain.handle('exit-app', async () => {
+ipcMain.handle('exit-app', async (_event, token) => {
+  if (app.isPackaged && token !== ADMIN_SESSION_TOKEN) return false;
   enableAppExit();
   app.removeAllListeners('window-all-closed');
   if (win && !win.isDestroyed()) {
@@ -716,11 +762,73 @@ ipcMain.handle('get-autostart', () => {
   }
 });
 
+// ── Admin session token ────────────────────────────────────────────────────────
+ipcMain.handle('request-admin-token', () => {
+  adminSessionGranted = true;
+  return ADMIN_SESSION_TOKEN;
+});
+
+// ── Domain allow-list sync from renderer ──────────────────────────────────────
+ipcMain.on('sync-domains', (_event, domains, strictMode) => {
+  mainDomains = Array.isArray(domains) ? domains.map(normalizeDomainMain).filter(Boolean) : [];
+  mainStrictMode = strictMode !== false;
+});
+
+// ── Config backup (renderer calls this on every save) ─────────────────────────
+ipcMain.handle('backup-config', (_event, data) => {
+  if (!data || typeof data !== 'object') return false;
+  writeCfgBackup(data);
+  return true;
+});
+
+// ── Restore config backup (called on init if localStorage is empty) ───────────
+ipcMain.handle('restore-config', () => {
+  return readCfgBackup();
+});
+
+// ── Wipe data (requires admin token in packaged builds) ───────────────────────
+ipcMain.handle('wipe-data', async (_event, token) => {
+  if (app.isPackaged && token !== ADMIN_SESSION_TOKEN) return false;
+  await session.defaultSession.clearStorageData();
+  await session.defaultSession.clearCache();
+  try { fs.unlinkSync(CFG_BACKUP_PATH); } catch (_) {}
+  return true;
+});
+
 // ── Lifecycle ─────────────────────────────────────────────────────────────────
 
 app.whenReady().then(() => {
   configureAutoUpdater();
-  // Strip headers that block iframe embedding (X-Frame-Options, CSP frame-ancestors)
+
+  // ── Power save blocker: prevent display/system sleep ──────────────────────
+  powerSaveBlocker.start('prevent-display-sleep');
+
+  // ── Domain enforcement at network boundary ────────────────────────────────
+  // Blocks navigation and subframe loads that go outside the allow-list,
+  // independent of renderer-side checks. Bypasses renderer-only protection.
+  session.defaultSession.webRequest.onBeforeRequest(
+    { urls: ['http://*/*', 'https://*/*'] },
+    (details, callback) => {
+      if (!mainDomains.length || !mainStrictMode) { callback({ cancel: false }); return; }
+      // Only enforce on subframe navigation (not XHR/fetch/scripts from allowed pages)
+      if (!['subFrame', 'mainFrame'].includes(details.resourceType)) { callback({ cancel: false }); return; }
+      // Shell index.html itself is a file:// URL — always allow
+      if (details.url.startsWith('file://')) { callback({ cancel: false }); return; }
+      try {
+        const host = new URL(details.url).hostname;
+        if (!isDomainAllowedMain(host)) {
+          callback({ cancel: true });
+          if (win && !win.isDestroyed()) {
+            win.webContents.send('domain-blocked', host);
+          }
+          return;
+        }
+      } catch (_) {}
+      callback({ cancel: false });
+    }
+  );
+
+  // Strip headers that block iframe embedding
   session.defaultSession.webRequest.onHeadersReceived({ urls: ['*://*/*'] }, (details, callback) => {
     if (details.resourceType && !['mainFrame', 'subFrame'].includes(details.resourceType)) {
       callback({ cancel: false, responseHeaders: details.responseHeaders });
@@ -745,6 +853,7 @@ app.whenReady().then(() => {
     }
     callback({ cancel: false, responseHeaders: newHeaders });
   });
+
   createWindow();
 });
 app.on('before-quit', () => {

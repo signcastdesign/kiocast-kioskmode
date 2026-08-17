@@ -12,6 +12,11 @@ let cfg={
   useCustomLogo:false, customLogo:'',
   runOnStartup:false,
 };
+let adminToken=null;
+async function getAdminToken(){
+  if(adminToken)return adminToken;
+  try{adminToken=await window.kioskElectron?.requestAdminToken?.();return adminToken;}catch(e){return null;}
+}
 let activityLog=[];
 let pinBuffer='', pinPurpose='';
 let idleTimer=null, ict=null;
@@ -50,12 +55,31 @@ function loadCfg(){
   try{const s=localStorage.getItem('ks_cfg');if(s){const parsed=JSON.parse(s);delete parsed.pin;cfg={...cfg,...parsed}}cfg.domains=dedupeDomains(cfg.domains||[])}catch(e){}
   try{const l=localStorage.getItem('ks_log');if(l)activityLog=JSON.parse(l)}catch(e){}
 }
+async function loadCfgWithFallback(){
+  loadCfg();
+  if(!cfg.url&&window.kioskElectron?.restoreConfig){
+    try{
+      const backup=await window.kioskElectron.restoreConfig();
+      if(backup&&typeof backup==='object'&&backup.url){
+        delete backup.pin;
+        cfg={...cfg,...backup};
+        cfg.domains=dedupeDomains(cfg.domains||[]);
+        localStorage.setItem('ks_cfg',JSON.stringify({...cfg,pin:undefined}));
+        log('info','Config restored from file backup');
+      }
+    }catch(e){}
+  }
+}
 function saveCfg(){
   try{
     const toStore={...cfg};
     delete toStore.pin;
     localStorage.setItem('ks_cfg',JSON.stringify(toStore));
+    window.kioskElectron?.backupConfig?.(toStore);
   }catch(e){}
+}
+function syncDomainsToMain(){
+  window.kioskElectron?.syncDomains?.(cfg.domains,cfg.strictMode);
 }
 function saveLog(){try{localStorage.setItem('ks_log',JSON.stringify(activityLog))}catch(e){}}
 
@@ -207,6 +231,7 @@ function applySettings(){
   renderQuickNavBtns();
   applyCustomLogo();
   updateGuard();
+  syncDomainsToMain();
   if(!cfg.vkEnabled)hideVirtualKeyboard(true);else initKioskBoard();
 }
 
@@ -1018,6 +1043,13 @@ function addQNav(){
 }
 function removeQNav(id){cfg.quickNavBtns=cfg.quickNavBtns.filter(b=>b.id!==id);renderQNavList()}
 
+function moveQNav(i,dir){
+  const j=i+dir;
+  if(j<0||j>=cfg.quickNavBtns.length)return;
+  [cfg.quickNavBtns[i],cfg.quickNavBtns[j]]=[cfg.quickNavBtns[j],cfg.quickNavBtns[i]];
+  renderQNavList();
+}
+
 function renderQNavList(){
   const el=document.getElementById('qnav-list');
   if(!cfg.quickNavBtns.length){el.innerHTML='<div class="domain-empty">No buttons added yet.</div>';return}
@@ -1025,22 +1057,7 @@ function renderQNavList(){
   cfg.quickNavBtns.forEach((btn,i)=>{
     const row=document.createElement('div');
     row.className='qnav-item';
-    row.draggable=true;
-    row.dataset.i=i;
-    row.innerHTML=`<span class="qnav-drag-handle" title="Drag to reorder">&#8597;</span><span class="qnav-item-emoji">${quickNavIconMarkup(btn)}</span><span class="qnav-item-label">${escH(btn.label)}</span><span class="qnav-item-url">${escH(btn.url)}</span><button onclick="removeQNav(${btn.id})" title="Remove">&#x2715;</button>`;
-    row.addEventListener('dragstart',e=>{e.dataTransfer.setData('text/plain',i);row.classList.add('dragging')});
-    row.addEventListener('dragend',()=>row.classList.remove('dragging'));
-    row.addEventListener('dragover',e=>{e.preventDefault();row.classList.add('drag-over')});
-    row.addEventListener('dragleave',()=>row.classList.remove('drag-over'));
-    row.addEventListener('drop',e=>{
-      e.preventDefault();row.classList.remove('drag-over');
-      const from=parseInt(e.dataTransfer.getData('text/plain'));
-      const to=parseInt(row.dataset.i);
-      if(from===to)return;
-      const moved=cfg.quickNavBtns.splice(from,1)[0];
-      cfg.quickNavBtns.splice(to,0,moved);
-      renderQNavList();
-    });
+    row.innerHTML=`<span class="qnav-item-emoji">${quickNavIconMarkup(btn)}</span><span class="qnav-item-label">${escH(btn.label)}</span><span class="qnav-item-url">${escH(btn.url)}</span><div class="qnav-item-actions"><button title="Move up" onclick="moveQNav(${i},-1)" ${i===0?'disabled style="opacity:.3"':''}>&#9650;</button><button title="Move down" onclick="moveQNav(${i},1)" ${i===cfg.quickNavBtns.length-1?'disabled style="opacity:.3"':''}>&#9660;</button><button title="Remove" onclick="removeQNav(${btn.id})">&#x2715;</button></div>`;
     el.appendChild(row);
   });
 }
@@ -1568,7 +1585,8 @@ async function clearCacheOnly(){
 async function wipeAllData(){
   const ok=await showConfirmDialog({title:'Wipe All Data?',copy:'This clears cookies, cache, site storage, and all KioskShell settings. This cannot be undone.',confirmText:'WIPE DATA',danger:true});
   if(!ok)return;
-  if(window.kioskElectron?.wipeData)await window.kioskElectron.wipeData();
+  const token=await getAdminToken();
+  if(window.kioskElectron?.wipeData)await window.kioskElectron.wipeData(token);
   localStorage.removeItem('ks_cfg');localStorage.removeItem('ks_log');
   location.reload();
 }
@@ -1673,7 +1691,8 @@ async function exitApplication(){
   }
   hideVirtualKeyboard(true,'exit');
   closeSettings();
-  await window.kioskElectron.exitApp();
+  const token=await getAdminToken();
+  await window.kioskElectron.exitApp(token);
 }
 
 /* ═══════════════════════════════════════════════════
@@ -1684,12 +1703,19 @@ if(!window.kioskElectron&&'serviceWorker'in navigator)navigator.serviceWorker.re
 /* ═══════════════════════════════════════════════════
    INIT
 ═══════════════════════════════════════════════════ */
-loadCfg();migrateLegacyPin();applySettings();updateNavButtons();
-if(window.kioskElectron?.onUpdateState)window.kioskElectron.onUpdateState(renderUpdateState);
-refreshUpdateState();
-if(window.kioskElectron?.getAutoStart){
-  window.kioskElectron.getAutoStart().then(on=>{
-    if(on!==undefined)cfg.runOnStartup=!!on;
-  }).catch(()=>{});
-}
-if(cfg.url)navigateTo(cfg.url);else openSettings();
+(async()=>{
+  await loadCfgWithFallback();
+  migrateLegacyPin();
+  applySettings();
+  updateNavButtons();
+  if(window.kioskElectron?.onUpdateState)window.kioskElectron.onUpdateState(renderUpdateState);
+  if(window.kioskElectron?.onDomainBlocked)window.kioskElectron.onDomainBlocked(host=>{showBlockScreen(host);log('block','Main-process blocked: '+host);});
+  refreshUpdateState();
+  getAdminToken();
+  if(window.kioskElectron?.getAutoStart){
+    window.kioskElectron.getAutoStart().then(on=>{
+      if(on!==undefined)cfg.runOnStartup=!!on;
+    }).catch(()=>{});
+  }
+  if(cfg.url)navigateTo(cfg.url);else openSettings();
+})();
