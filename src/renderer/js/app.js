@@ -745,7 +745,7 @@ function resetVirtualKeyboardIntent(){
 }
 
 function isVirtualKeyboardVisible(){
-  return !!document.getElementById('vk-overlay')?.classList.contains('visible');
+  return !!document.querySelector('.kioskboard-wrapper');
 }
 
 function updateVirtualKeyboardTriggerButton(){
@@ -810,6 +810,31 @@ function sendVirtualKeyboardInput(payload){
 
 function showVirtualKeyboard(reason='show'){
   vkLastReason=reason;
+  if(!cfg.vkEnabled||!window.KioskBoard)return;
+  const el=vkTarget||document.activeElement;
+  if(!el||!isVirtualKeyboardInput(el))return;
+  el.classList.add(KIOSKBOARD_SELECTOR.slice(1));
+  el.setAttribute('data-kioskboard-type',
+    (cfg.vkLayout==='numeric'||(el.type||'').toLowerCase()==='number'||(el.type||'').toLowerCase()==='tel')
+    ?'numpad':'all');
+  el.setAttribute('data-kioskboard-placement','bottom');
+  el.setAttribute('data-kioskboard-specialcharacters',cfg.vkLayout==='numeric'?'false':'true');
+  const runAndFocus=()=>{
+    window.KioskBoard.run(KIOSKBOARD_SELECTOR,kioskBoardOptions());
+    kioskBoardSignature=`${cfg.vkLayout}|${cfg.vkWidth}|${cfg.vkHeight}|${cfg.vkFont}|${cfg.vkEnabled}`;
+    requestAnimationFrame(()=>{
+      el.blur();
+      requestAnimationFrame(()=>el.focus({preventScroll:true}));
+    });
+  };
+  if(!document.querySelector('.kioskboard-wrapper')){
+    runAndFocus();
+  } else {
+    requestAnimationFrame(()=>{
+      el.blur();
+      requestAnimationFrame(()=>el.focus({preventScroll:true}));
+    });
+  }
 }
 
 function hideVirtualKeyboard(immediate=false,reason='hide'){
@@ -820,34 +845,33 @@ function hideVirtualKeyboard(immediate=false,reason='hide'){
     vkManualHidden=true;
     clearVirtualKeyboardFocusState();
     cancelVirtualKeyboardProbe();
-    vkManualHideTimer=setTimeout(()=>{
-      vkManualHidden=false;
-      
-    },1200);
+    vkManualHideTimer=setTimeout(()=>{vkManualHidden=false;},1200);
   }
-  const vk=document.getElementById('vk-overlay');
-  if(!vk)return;
-  clearTimeout(vkHideTimer);
-  vkHideTimer=null;
-  vkShift=false;
-  renderVirtualKeyboard();
-  vk.classList.remove('visible');
-  vk.setAttribute('aria-hidden','true');
-  if(cfg.vkMode!=='floating')vk.style.transform='translate(-50%,105%)';
-  const done=()=>{if(!vk.classList.contains('visible'))vk.style.display='none';updateVirtualKeyboardTriggerButton();};
-  if(immediate)done(); else setTimeout(done,220);
+  const close=()=>{
+    try{
+      const kb=document.querySelector('.kioskboard-wrapper');
+      if(kb)kb.remove();
+    }catch(e){}
+    if(document.activeElement&&document.activeElement!==document.body){
+      try{document.activeElement.blur();}catch(e){}
+    }
+    updateVirtualKeyboardTriggerButton();
+  };
+  if(immediate)close();else setTimeout(close,60);
 }
 
 function toggleManualVirtualKeyboard(){
-  initKioskBoard();
+  const kb=document.querySelector('.kioskboard-wrapper');
+  if(kb){
+    hideVirtualKeyboard(true,'manual-toggle');
+    return;
+  }
   const target=getVirtualKeyboardTarget();
   if(target){
     resetVirtualKeyboardManualHide();
     markVirtualKeyboardPointerIntent();
-    target.classList.add(KIOSKBOARD_SELECTOR.slice(1));
-    target.focus({preventScroll:true});
-    target.click?.();
-    showToast('Keyboard opened','ok');
+    vkTarget=target;
+    showVirtualKeyboard('manual-toggle');
     return;
   }
   showToast('Select a text field first','ok');
@@ -859,6 +883,11 @@ function syncVirtualKeyboardToFocus(){
 
 function queueVirtualKeyboardHide(){
   clearTimeout(vkHideTimer);
+  vkHideTimer=setTimeout(()=>{
+    if(!isVirtualKeyboardInput(document.activeElement)&&!isVirtualKeyboardInput(vkTarget)){
+      hideVirtualKeyboard(false,'queue-hide');
+    }
+  },200);
 }
 
 function typeIntoField(el,text){
@@ -1293,10 +1322,10 @@ document.addEventListener('keydown',e=>{
 document.addEventListener('focusin',e=>{
   if(!cfg.vkEnabled||!cfg.vkAutoShow)return;
   if(isVirtualKeyboardInput(e.target)){
+    clearTimeout(vkHideTimer);
     vkTarget=e.target;
     vkKeepVisibleUntil=Date.now()+1500;
-    clearTimeout(vkHideTimer);
-    if(hasRecentVirtualKeyboardPointerIntent())showVirtualKeyboard('host-focusin');
+    showVirtualKeyboard('host-focusin');
   }
 },true);
 document.addEventListener('focusout',e=>{
