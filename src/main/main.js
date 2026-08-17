@@ -651,13 +651,6 @@ ipcMain.handle('clear-cache', async () => {
   return true;
 });
 
-/** Wipe everything the framed site could have stored — cookies, storage, cache. */
-ipcMain.handle('wipe-data', async () => {
-  await session.defaultSession.clearStorageData();
-  await session.defaultSession.clearCache();
-  return true;
-});
-
 ipcMain.handle('update-state', async () => updateState);
 
 ipcMain.handle('update-check', async () => {
