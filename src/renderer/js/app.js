@@ -403,10 +403,7 @@ function kioskBoardRows(){
 function prepareKioskBoardTargets(root=document){
   const fields=root.querySelectorAll?.('input, textarea')||[];
   fields.forEach(el=>{
-    if(el.closest('#settings-overlay')||el.closest('#pin-overlay')||el.closest('#exit-confirm')){
-      el.classList.remove(KIOSKBOARD_SELECTOR.slice(1));
-      return;
-    }
+    if(el.closest('#vk-overlay')||el.closest('.kioskboard-wrapper'))return;
     const type=(el.type||'text').toLowerCase();
     const allowed=!el.disabled&&!el.readOnly&&!KIOSKBOARD_SKIP_TYPES.includes(type);
     el.classList.toggle(KIOSKBOARD_SELECTOR.slice(1),!!cfg.vkEnabled&&allowed);
@@ -640,7 +637,7 @@ function applyVirtualKeyboardStyle(){
 
 function isVirtualKeyboardInput(el){
   if(!el||!el.isConnected)return false;
-  if(el.closest('#vk-overlay')||el.closest('#pin-overlay')||el.closest('#settings-overlay')||el.closest('#exit-confirm'))return false;
+  if(el.closest('#vk-overlay')||el.closest('.kioskboard-wrapper'))return false;
   if(el.matches('textarea'))return !el.readOnly&&!el.disabled;
   if(el.matches('input')){
     const type=(el.type||'text').toLowerCase();
@@ -648,6 +645,24 @@ function isVirtualKeyboardInput(el){
     return !el.readOnly&&!el.disabled;
   }
   return !!el.isContentEditable;
+}
+
+function getKeyboardAnchor(){
+  let el=document.getElementById('ks-keyboard-anchor');
+  if(!el){
+    el=document.createElement('input');
+    el.id='ks-keyboard-anchor';
+    el.type='text';
+    el.autocomplete='off';
+    el.setAttribute('aria-hidden','true');
+    el.style.cssText='position:fixed;left:-10000px;bottom:0;width:1px;height:1px;opacity:0;pointer-events:none;z-index:-1';
+    document.body.appendChild(el);
+  }
+  el.classList.add(KIOSKBOARD_SELECTOR.slice(1));
+  el.setAttribute('data-kioskboard-type',cfg.vkLayout==='numeric'?'numpad':'all');
+  el.setAttribute('data-kioskboard-placement','bottom');
+  el.setAttribute('data-kioskboard-specialcharacters',cfg.vkLayout==='numeric'?'false':'true');
+  return el;
 }
 
 function getIframeVirtualKeyboardTarget(){
@@ -839,7 +854,10 @@ function showVirtualKeyboard(reason='show'){
   if(!cfg.vkEnabled||!window.KioskBoard)return;
   if(vkPhysicalKeyAt&&Date.now()-vkPhysicalKeyAt<2000&&reason!=='manual-toggle')return;
   clearTimeout(vkHideTimer);
-  const el=vkTarget||document.activeElement;
+  prepareKioskBoardTargets(document);
+  applyKioskBoardStyle();
+  const active=vkTarget||document.activeElement;
+  const el=isVirtualKeyboardInput(active)?active:getKeyboardAnchor();
   if(el&&isVirtualKeyboardInput(el)){
     el.classList.add(KIOSKBOARD_SELECTOR.slice(1));
     el.setAttribute('data-kioskboard-type',
@@ -851,14 +869,13 @@ function showVirtualKeyboard(reason='show'){
   if(!document.querySelector('.kioskboard-wrapper')){
     window.KioskBoard.run(KIOSKBOARD_SELECTOR,kioskBoardOptions());
     kioskBoardSignature=`${cfg.vkLayout}|${cfg.vkWidth}|${cfg.vkHeight}|${cfg.vkFont}|${cfg.vkEnabled}`;
-    if(el&&isVirtualKeyboardInput(el)){
-      requestAnimationFrame(()=>{el.blur();requestAnimationFrame(()=>el.focus({preventScroll:true}));});
-    }
-  } else {
-    if(el&&isVirtualKeyboardInput(el)){
-      requestAnimationFrame(()=>{el.blur();requestAnimationFrame(()=>el.focus({preventScroll:true}));});
-    }
   }
+  requestAnimationFrame(()=>{
+    try{el.focus({preventScroll:true});}catch(e){}
+    el.dispatchEvent(new Event('focus',{bubbles:false}));
+    el.dispatchEvent(new Event('focusin',{bubbles:true}));
+    el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,view:window}));
+  });
   updateVirtualKeyboardTriggerButton();
 }
 
@@ -877,9 +894,6 @@ function hideVirtualKeyboard(immediate=false,reason='hide'){
       const kb=document.querySelector('.kioskboard-wrapper');
       if(kb)kb.remove();
     }catch(e){}
-    if(document.activeElement&&document.activeElement!==document.body){
-      try{document.activeElement.blur();}catch(e){}
-    }
     updateVirtualKeyboardTriggerButton();
   };
   if(immediate)close();else setTimeout(close,60);
@@ -904,8 +918,11 @@ function syncVirtualKeyboardToFocus(){
 }
 
 function queueVirtualKeyboardHide(){
+  if(vkForcedOpen)return;
   clearTimeout(vkHideTimer);
   vkHideTimer=setTimeout(()=>{
+    if(vkForcedOpen)return;
+    if(document.activeElement?.closest?.('.kioskboard-wrapper'))return;
     if(!isVirtualKeyboardInput(document.activeElement)&&!isVirtualKeyboardInput(vkTarget)){
       hideVirtualKeyboard(false,'queue-hide');
     }
@@ -1347,11 +1364,13 @@ document.addEventListener('focusin',e=>{
   }
 },true);
 document.addEventListener('focusout',e=>{
+  if(e.relatedTarget?.closest?.('.kioskboard-wrapper'))return;
   if(e.target===vkTarget||isVirtualKeyboardInput(e.target))queueVirtualKeyboardHide();
 },true);
 document.addEventListener('pointerdown',e=>{
   const vk=document.getElementById('vk-overlay');
   if(vk.contains(e.target))return;
+  if(e.target.closest('.kioskboard-wrapper'))return;
   if(e.target.closest('#vk-trigger'))return;
   vkPhysicalKeyAt=0;
   if(isVirtualKeyboardInput(e.target)){
