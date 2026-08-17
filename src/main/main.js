@@ -224,11 +224,27 @@ function configureAutoUpdater() {
   });
 
   autoUpdater.on('error', error => {
+    purgeUpdaterCache();
     setUpdateState({
       status: 'error',
       error: error && error.message ? error.message : String(error)
     });
   });
+}
+
+function purgeUpdaterCache() {
+  try {
+    const tempDir = app.getPath('temp');
+    const cacheDir = path.join(app.getPath('appData'), 'kioskshell-updater');
+    for (const dir of [tempDir, cacheDir]) {
+      if (!fs.existsSync(dir)) continue;
+      for (const f of fs.readdirSync(dir)) {
+        if (/^KIOCAST-KioskShell-Setup.*\.exe(\.partial)?$/i.test(f)) {
+          try { fs.unlinkSync(path.join(dir, f)); } catch (_) {}
+        }
+      }
+    }
+  } catch (_) {}
 }
 
 // ── Window ────────────────────────────────────────────────────────────────────
@@ -791,6 +807,7 @@ ipcMain.handle('wipe-data', async (_event, token) => {
 // ── Lifecycle ─────────────────────────────────────────────────────────────────
 
 app.whenReady().then(() => {
+  purgeUpdaterCache();
   configureAutoUpdater();
 
   // ── Power save blocker: prevent display/system sleep ──────────────────────
